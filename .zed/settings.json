@@ -1,0 +1,36 @@
+{
+  "languages": {
+    "Python": {
+      "language_servers": ["pyright", "!ruff"],
+      "format_on_save": "on",
+      "formatter": [
+        { "external": { "command": "isort", "arguments": ["--stdin-filename", "{buffer_path}", "-"] } },
+        { "external": { "command": "black", "arguments": ["--stdin-filename", "{buffer_path}", "-"] } }
+      ]
+    },
+    "TypeScript": {
+      "format_on_save": "on",
+      "formatter": { "external": { "command": "prettier", "arguments": ["--stdin-filepath", "{buffer_path}"] } }
+    },
+    "TSX": {
+      "format_on_save": "on",
+      "formatter": { "external": { "command": "prettier", "arguments": ["--stdin-filepath", "{buffer_path}"] } }
+    },
+    "JavaScript": {
+      "format_on_save": "on",
+      "formatter": { "external": { "command": "prettier", "arguments": ["--stdin-filepath", "{buffer_path}"] } }
+    }
+  },
+  "lsp": {
+    "pyright": {
+      "settings": {
+        "python": {
+          "pythonPath": "/home/amine/.conda/envs/fastapi/bin/python"
+        }
+      }
+    }
+  },
+  "tab_size": 2,
+  "preferred_line_length": 88,
+  "show_whitespaces": "selection"
+}
