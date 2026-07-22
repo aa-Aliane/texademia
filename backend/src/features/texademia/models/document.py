@@ -14,16 +14,17 @@ class Document(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     user_id: uuid.UUID = Field(foreign_key="users.id", nullable=False, index=True)
     title: str = Field(default="Untitled", nullable=False)
-    template: str = Field(
-        default="default", nullable=False
-    )  # "default" | "arxiv" | "ieee"
+    template: str = Field(default="default", nullable=False)
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
     updated_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
 
     user: "User" = Relationship()
     files: List["DocumentFile"] = Relationship(
         back_populates="document",
-        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "lazy": "selectin",
+        },
     )
 
 

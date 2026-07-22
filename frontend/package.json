@@ -24,6 +24,7 @@
     "@mantine/core": "^9.4.1",
     "@mantine/form": "^9.4.1",
     "@mantine/hooks": "^9.4.1",
+    "@tabler/icons-react": "^3.45.0",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/match-sorter-utils": "latest",
     "@tanstack/react-devtools": "latest",

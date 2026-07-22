@@ -4,12 +4,13 @@ import tempfile
 import uuid
 from pathlib import Path
 
+from src.features.texademia.assets import get_template_asset_files
 from src.features.texademia.models.document import DocumentFile
 
 OUTPUT_DIR = Path("compiled_pdfs")
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-COMPILE_TIMEOUT_SECONDS = 30
+COMPILE_TIMEOUT_SECONDS = 120
 
 
 class CompileError(Exception):
@@ -19,7 +20,9 @@ class CompileError(Exception):
         super().__init__(message)
 
 
-async def compile_latex(files: list[DocumentFile], document_id: uuid.UUID) -> str:
+async def compile_latex(
+    files: list[DocumentFile], document_id: uuid.UUID, template: str
+) -> str:
     if not shutil.which("latexmk"):
         raise CompileError("latexmk is not installed on the server.")
 
@@ -29,6 +32,10 @@ async def compile_latex(files: list[DocumentFile], document_id: uuid.UUID) -> st
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
+
+        for asset in get_template_asset_files(template):
+            shutil.copy(asset, tmp_path / asset.name)
+
         for f in files:
             (tmp_path / f.name).write_text(f.content, encoding="utf-8")
 

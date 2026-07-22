@@ -1,2 +1,3 @@
 export { RedactionPage } from "./components/redactionPage";
-export { createDocument, documentQueryOptions } from "./api/redaction";
+export { DocumentsListPage } from "./components/documentsListPage"
+export { createDocument, documentQueryOptions, documentsQueryOptions } from "./api/redaction";

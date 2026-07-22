@@ -1,72 +1,87 @@
+// redaction/components/redactionPage.tsx
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Group, Stack } from "@mantine/core";
 import { Editor } from "./editor";
 import { PdfPreview } from "./pdfPreview";
-import { CompileButton } from "./compileButton";
-import { FileTabs } from "./fileTabs";
+import { FileTabs, PREVIEW_TAB_ID } from "./fileTabs";
+import { DocumentHeader } from "./documentHeader";
 import { useCompileDocument } from "../hooks/useCompileDocument";
+import { useUpdateDocumentTitle } from "../hooks/useUpdateDocumentTitle";
 import { documentQueryOptions } from "../api/redaction";
-import { useEditorStore } from "../store/editorStore";
+import type { ProjectFile } from "../types/redaction";
 
 interface RedactionPageProps {
   documentId: string;
 }
 
 export function RedactionPage({ documentId }: RedactionPageProps) {
-  // Cache is already warm — the route loader awaited this exact query.
   const { data: document } = useQuery(documentQueryOptions(documentId));
 
-  const files = useEditorStore((s) => s.files);
-  const activeFileId = useEditorStore((s) => s.activeFileId);
-  const setFiles = useEditorStore((s) => s.setFiles);
-  const setActiveFileId = useEditorStore((s) => s.setActiveFileId);
-  const updateActiveFileContent = useEditorStore(
-    (s) => s.updateActiveFileContent,
+  const [files, setFiles] = useState<ProjectFile[]>(() => document?.files ?? []);
+  const [activeFileId, setActiveFileId] = useState<string | null>(
+    () => document?.files[0]?.id ?? null
   );
-
-  // First render after navigation: store is empty, server data is ready synchronously
-  // (thanks to the loader) — seed it here, no effect needed.
-  if (files.length === 0 && document) {
-    setFiles(document.files);
-  }
+  const [activeTabId, setActiveTabId] = useState<string>("");
 
   const {
     mutate: compile,
     data: compileResult,
     isPending: isCompiling,
+    isSuccess: isCompileSuccess,
+    isError: isCompileError,
+    error: compileError,
   } = useCompileDocument(documentId);
+
+  const { mutate: saveTitle, isPending: isSavingTitle } = useUpdateDocumentTitle(documentId);
 
   if (!document || !activeFileId) return null;
 
-  const activeFile = files.find((f) => f.id === activeFileId)!;
+  const currentTabId = activeTabId || activeFileId;
+  const activeFile = files.find((f) => f.id === currentTabId);
+
+  const updateActiveFileContent = (content: string) => {
+    setFiles((prev) => prev.map((f) => (f.id === activeFileId ? { ...f, content } : f)));
+  };
+
+  const handleSelectTab = (id: string) => {
+    setActiveTabId(id);
+    if (id !== PREVIEW_TAB_ID) setActiveFileId(id);
+  };
+
+  const compileStatus = isCompiling
+    ? "compiling"
+    : isCompileError
+    ? "error"
+    : isCompileSuccess
+    ? "success"
+    : "idle";
 
   return (
-    <Stack h="100%" gap="md">
-      <Group>
-        <CompileButton
-          onCompile={() => compile(files)}
-          isCompiling={isCompiling}
-        />
-      </Group>
-      <Group align="stretch" style={{ flex: 1 }} gap="md">
-        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-          <FileTabs
-            files={files}
-            activeFileId={activeFileId}
-            onSelect={setActiveFileId}
-          />
-          <div style={{ flex: 1 }}>
-            <Editor
-              value={activeFile.content}
-              language={activeFile.language}
-              onChange={updateActiveFileContent}
-            />
-          </div>
-        </div>
-        <div style={{ flex: 1 }}>
+    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      <DocumentHeader
+        title={document.title}
+        onTitleSave={saveTitle}
+        isSavingTitle={isSavingTitle}
+        onCompile={() => compile(files)}
+        compileStatus={compileStatus}
+        compileError={(compileError as any)?.message}
+        template={document.template}
+        pdfUrl={compileResult?.pdfUrl ?? null}
+      />
+
+      <FileTabs files={files} activeTabId={currentTabId} onSelect={handleSelectTab} />
+
+      <div style={{ flex: 1, minHeight: 0 }}>
+        {currentTabId === PREVIEW_TAB_ID ? (
           <PdfPreview pdfUrl={compileResult?.pdfUrl ?? null} />
-        </div>
-      </Group>
-    </Stack>
+        ) : activeFile ? (
+          <Editor
+            value={activeFile.content}
+            language={activeFile.language}
+            onChange={updateActiveFileContent}
+          />
+        ) : null}
+      </div>
+    </div>
   );
 }

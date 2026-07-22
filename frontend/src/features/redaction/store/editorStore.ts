@@ -2,21 +2,24 @@ import { create } from "zustand";
 import type { ProjectFile } from "../types/redaction";
 
 interface EditorState {
+  documentId: string | null;
   files: ProjectFile[];
   activeFileId: string | null;
-  setFiles: (files: ProjectFile[]) => void;
+  loadDocument: (documentId: string, files: ProjectFile[]) => void;
   setActiveFileId: (id: string) => void;
   updateActiveFileContent: (content: string) => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
+  documentId: null,
   files: [],
   activeFileId: null,
-  setFiles: (files) =>
-    set((state) => ({
+  loadDocument: (documentId, files) =>
+    set({
+      documentId,
       files,
-      activeFileId: state.activeFileId ?? files[0]?.id ?? null,
-    })),
+      activeFileId: files[0]?.id ?? null,
+    }),
   setActiveFileId: (id) => set({ activeFileId: id }),
   updateActiveFileContent: (content) => {
     const { activeFileId, files } = get();

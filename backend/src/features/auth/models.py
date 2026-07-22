@@ -24,5 +24,3 @@ class User(SQLModel, table=True):
     last_name: Optional[str] = Field(default=None, nullable=True)
 
     profile: Optional["Profile"] = Relationship(back_populates="user")
-    educations: List["Education"] = Relationship(back_populates="user")
-    experiences: List["Experience"] = Relationship(back_populates="user")

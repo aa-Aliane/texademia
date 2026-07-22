@@ -45,3 +45,22 @@ export async function compileDocument(
   const data = await api.post<{ pdf_url: string }>(`/api/texademia/documents/${documentId}/compile`);
   return { pdfUrl: toPublicUrl(data.pdf_url) };
 }
+
+export async function updateDocumentTitle(
+  documentId: string,
+  title: string
+): Promise<RedactionDocument> {
+  const data = await api.patch<DocumentDto>(`/api/texademia/documents/${documentId}`, { title });
+  return mapDocument(data);
+}
+
+export async function listDocuments(cookieHeader?: string | null): Promise<RedactionDocument[]> {
+  const data = await api.get<DocumentDto[]>("/api/texademia/documents", { cookieHeader });
+  return data.map(mapDocument);
+}
+
+export const documentsQueryOptions = (cookieHeader?: string | null) =>
+  queryOptions({
+    queryKey: ["documents"],
+    queryFn: () => listDocuments(cookieHeader),
+  });

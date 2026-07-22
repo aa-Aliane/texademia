@@ -7,8 +7,8 @@ interface CompileButtonProps {
 
 export function CompileButton({ onCompile, isCompiling }: CompileButtonProps) {
   return (
-    <Button onClick={onCompile} loading={isCompiling}>
-      Compile
+    <Button onClick={onCompile} disabled={isCompiling}>
+      {isCompiling ? "Compiling…" : "Compile"}
     </Button>
   );
 }

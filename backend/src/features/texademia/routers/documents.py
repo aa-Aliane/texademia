@@ -7,7 +7,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.database.session import get_db
 from src.features.auth.models import User
-from src.features.auth.router import current_active_user
+from src.features.auth.dev_user import get_dev_user
 from src.features.texademia.models.document import Document, DocumentFile
 from src.features.texademia.schemas.document import (
     DocumentCreate,
@@ -41,7 +41,7 @@ async def _get_owned_document(
 @router.get("", response_model=List[DocumentRead])
 async def list_documents(
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(current_active_user),
+    user: User = Depends(get_dev_user),
 ):
     statement = select(Document).where(Document.user_id == user.id)
     result = await session.exec(statement)
@@ -52,7 +52,7 @@ async def list_documents(
 async def create_document(
     doc_in: DocumentCreate,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(current_active_user),
+    user: User = Depends(get_dev_user),
 ):
     document = Document(title=doc_in.title, template=doc_in.template, user_id=user.id)
     session.add(document)
@@ -75,7 +75,7 @@ async def create_document(
 async def get_document(
     document_id: uuid.UUID,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(current_active_user),
+    user: User = Depends(get_dev_user),
 ):
     return await _get_owned_document(document_id, session, user)
 
@@ -85,7 +85,7 @@ async def update_document(
     document_id: uuid.UUID,
     doc_in: DocumentUpdate,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(current_active_user),
+    user: User = Depends(get_dev_user),
 ):
     document = await _get_owned_document(document_id, session, user)
     for key, value in doc_in.model_dump(exclude_unset=True).items():
@@ -100,7 +100,7 @@ async def update_document(
 async def delete_document(
     document_id: uuid.UUID,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(current_active_user),
+    user: User = Depends(get_dev_user),
 ):
     document = await _get_owned_document(document_id, session, user)
     await session.delete(document)
@@ -113,7 +113,7 @@ async def update_file(
     file_id: uuid.UUID,
     file_in: FileUpdate,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(current_active_user),
+    user: User = Depends(get_dev_user),
 ):
     document = await _get_owned_document(document_id, session, user)
     file = next((f for f in document.files if f.id == file_id), None)
@@ -130,11 +130,11 @@ async def update_file(
 async def compile_document(
     document_id: uuid.UUID,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(current_active_user),
+    user: User = Depends(get_dev_user),
 ):
     document = await _get_owned_document(document_id, session, user)
     try:
-        pdf_url = await compile_latex(document.files, document.id)
+        pdf_url = await compile_latex(document.files, document.id, document.template)
     except CompilerError as e:
         raise HTTPException(
             status_code=422, detail={"message": e.message, "log": e.log}

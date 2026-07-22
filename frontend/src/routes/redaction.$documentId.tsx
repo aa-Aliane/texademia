@@ -7,6 +7,6 @@ export const Route = createFileRoute("/redaction/$documentId")({
     queryClient.ensureQueryData(documentQueryOptions(documentId)),
   component: () => {
     const { documentId } = Route.useParams();
-    return <RedactionPage documentId={documentId} />;
+    return <RedactionPage key={documentId} documentId={documentId} />;
   },
 });

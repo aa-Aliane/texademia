@@ -10,7 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as RedactionRouteImport } from './routes/redaction'
+import { Route as RedactionIndexRouteImport } from './routes/redaction.index'
 import { Route as RedactionDocumentIdRouteImport } from './routes/redaction.$documentId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -18,44 +18,45 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RedactionRoute = RedactionRouteImport.update({
-  id: '/redaction',
-  path: '/redaction',
+const RedactionIndexRoute = RedactionIndexRouteImport.update({
+  id: '/redaction/',
+  path: '/redaction/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RedactionDocumentIdRoute = RedactionDocumentIdRouteImport.update({
-  id: '/$documentId',
-  path: '/$documentId',
-  getParentRoute: () => RedactionRoute,
+  id: '/redaction/$documentId',
+  path: '/redaction/$documentId',
+  getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/redaction': typeof RedactionRouteWithChildren
   '/redaction/$documentId': typeof RedactionDocumentIdRoute
+  '/redaction/': typeof RedactionIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/redaction': typeof RedactionRouteWithChildren
   '/redaction/$documentId': typeof RedactionDocumentIdRoute
+  '/redaction': typeof RedactionIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/redaction': typeof RedactionRouteWithChildren
   '/redaction/$documentId': typeof RedactionDocumentIdRoute
+  '/redaction/': typeof RedactionIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/redaction' | '/redaction/$documentId'
+  fullPaths: '/' | '/redaction/$documentId' | '/redaction/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/redaction' | '/redaction/$documentId'
-  id: '__root__' | '/' | '/redaction' | '/redaction/$documentId'
+  to: '/' | '/redaction/$documentId' | '/redaction'
+  id: '__root__' | '/' | '/redaction/$documentId' | '/redaction/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  RedactionRoute: typeof RedactionRouteWithChildren
+  RedactionDocumentIdRoute: typeof RedactionDocumentIdRoute
+  RedactionIndexRoute: typeof RedactionIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -67,38 +68,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/redaction': {
-      id: '/redaction'
+    '/redaction/': {
+      id: '/redaction/'
       path: '/redaction'
-      fullPath: '/redaction'
-      preLoaderRoute: typeof RedactionRouteImport
+      fullPath: '/redaction/'
+      preLoaderRoute: typeof RedactionIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/redaction/$documentId': {
       id: '/redaction/$documentId'
-      path: '/$documentId'
+      path: '/redaction/$documentId'
       fullPath: '/redaction/$documentId'
       preLoaderRoute: typeof RedactionDocumentIdRouteImport
-      parentRoute: typeof RedactionRoute
+      parentRoute: typeof rootRouteImport
     }
   }
 }
 
-interface RedactionRouteChildren {
-  RedactionDocumentIdRoute: typeof RedactionDocumentIdRoute
-}
-
-const RedactionRouteChildren: RedactionRouteChildren = {
-  RedactionDocumentIdRoute: RedactionDocumentIdRoute,
-}
-
-const RedactionRouteWithChildren = RedactionRoute._addFileChildren(
-  RedactionRouteChildren,
-)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  RedactionRoute: RedactionRouteWithChildren,
+  RedactionDocumentIdRoute: RedactionDocumentIdRoute,
+  RedactionIndexRoute: RedactionIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

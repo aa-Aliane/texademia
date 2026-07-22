@@ -4,7 +4,7 @@ frontend/src/routes
 ├── __root.tsx
 ├── index.tsx
 ├── redaction.$documentId.tsx
-└── redaction.tsx
+└── redaction.index.tsx
 
 ```
 
@@ -129,27 +129,23 @@ export const Route = createFileRoute("/redaction/$documentId")({
     queryClient.ensureQueryData(documentQueryOptions(documentId)),
   component: () => {
     const { documentId } = Route.useParams();
-    return <RedactionPage documentId={documentId} />;
+    return <RedactionPage key={documentId} documentId={documentId} />;
   },
 });
 
 ```
 
 
-## redaction.tsx
+## redaction.index.tsx
 
 ```tsx
-import { createFileRoute, redirect } from "@tanstack/react-router";
-import { createDocument } from "#/features/redaction";
+import { createFileRoute } from "@tanstack/react-router";
+import { documentsQueryOptions, DocumentsListPage } from "#/features/redaction";
 
-export const Route = createFileRoute("/redaction")({
-  loader: async () => {
-    const doc = await createDocument("Untitled", "default");
-    throw redirect({
-      to: "/redaction/$documentId" as any,
-      params: { documentId: doc.id },
-    });
-  },
+export const Route = createFileRoute("/redaction/")({
+  loader: ({ context: { queryClient } }) =>
+    queryClient.ensureQueryData(documentsQueryOptions()),
+  component: DocumentsListPage,
 });
 
 ```

@@ -32,10 +32,12 @@ backend
     │   │   ├── __init__.py
     │   │   ├── __pycache__
     │   │   │   ├── __init__.cpython-311.pyc
+    │   │   │   ├── dev_user.cpython-311.pyc
     │   │   │   ├── manager.cpython-311.pyc
     │   │   │   ├── models.cpython-311.pyc
     │   │   │   ├── router.cpython-311.pyc
     │   │   │   └── schemas.cpython-311.pyc
+    │   │   ├── dev_user.py
     │   │   ├── manager.py
     │   │   ├── models.py
     │   │   ├── router.py
@@ -44,8 +46,13 @@ backend
     │       ├── __init__.py
     │       ├── __pycache__
     │       │   ├── __init__.cpython-311.pyc
+    │       │   ├── assets.cpython-311.pyc
     │       │   ├── router.cpython-311.pyc
     │       │   └── templates.cpython-311.pyc
+    │       ├── assets
+    │       │   └── arxiv
+    │       │       └── arxiv.sty
+    │       ├── assets.py
     │       ├── models
     │       │   ├── __init__.py
     │       │   ├── __pycache__
@@ -114,6 +121,11 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
+    texlive-latex-base \
+    texlive-latex-extra \
+    texlive-fonts-recommended \
+    texlive-publishers \
+    latexmk \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -122,6 +134,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
 ```
 
 
@@ -725,6 +738,48 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 ```
 
 
+## src/features/auth/dev_user.py
+
+```py
+import uuid
+from fastapi import Depends
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from src.database.session import get_db
+from src.features.auth.models import User
+
+DEV_USER_EMAIL = "dev@local.test"
+
+
+async def get_dev_user(session: AsyncSession = Depends(get_db)) -> User:
+    """
+    Stand-in for current_active_user while auth isn't wired up yet.
+    Returns (creating if needed) a single fixed local user so ownership
+    checks (Document.user_id, Profile.user_id, ...) keep working unchanged.
+
+    Remove this file and revert routers to current_active_user once
+    real login is implemented.
+    """
+    statement = select(User).where(User.email == DEV_USER_EMAIL)
+    result = await session.exec(statement)
+    user = result.first()
+    if user is None:
+        user = User(
+            email=DEV_USER_EMAIL,
+            hashed_password="!",  # unused — no login flow while this is active
+            is_active=True,
+            is_superuser=False,
+            is_verified=True,
+        )
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+    return user
+
+```
+
+
 ## src/features/auth/manager.py
 
 ```py
@@ -834,8 +889,6 @@ class User(SQLModel, table=True):
     last_name: Optional[str] = Field(default=None, nullable=True)
 
     profile: Optional["Profile"] = Relationship(back_populates="user")
-    educations: List["Education"] = Relationship(back_populates="user")
-    experiences: List["Experience"] = Relationship(back_populates="user")
 
 ```
 
@@ -898,6 +951,294 @@ class UserUpdate(schemas.BaseUserUpdate):
 ```
 
 
+## src/features/texademia/assets/arxiv/arxiv.sty
+
+```sty
+\NeedsTeXFormat{LaTeX2e}
+
+\ProcessOptions\relax
+
+% fonts
+\renewcommand{\rmdefault}{ptm}
+\renewcommand{\sfdefault}{phv}
+
+% set page geometry
+\usepackage[verbose=true,letterpaper]{geometry}
+\AtBeginDocument{
+  \newgeometry{
+    textheight=9in,
+    textwidth=6.5in,
+    top=1in,
+    headheight=14pt,
+    headsep=25pt,
+    footskip=30pt
+  }
+}
+
+\widowpenalty=10000
+\clubpenalty=10000
+\flushbottom
+\sloppy
+
+
+
+\newcommand{\headeright}{A Preprint}
+\newcommand{\undertitle}{A Preprint}
+\newcommand{\shorttitle}{\@title}
+
+\usepackage{fancyhdr}
+\fancyhf{}
+\pagestyle{fancy}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyheadoffset{0pt}
+\rhead{\scshape \footnotesize \headeright}
+\chead{\shorttitle}
+\cfoot{\thepage}
+
+
+%Handling Keywords
+\def\keywordname{{\bfseries \emph{Keywords}}}%
+\def\keywords#1{\par\addvspace\medskipamount{\rightskip=0pt plus1cm
+\def\and{\ifhmode\unskip\nobreak\fi\ $\cdot$
+}\noindent\keywordname\enspace\ignorespaces#1\par}}
+
+% font sizes with reduced leading
+\renewcommand{\normalsize}{%
+  \@setfontsize\normalsize\@xpt\@xipt
+  \abovedisplayskip      7\p@ \@plus 2\p@ \@minus 5\p@
+  \abovedisplayshortskip \z@ \@plus 3\p@
+  \belowdisplayskip      \abovedisplayskip
+  \belowdisplayshortskip 4\p@ \@plus 3\p@ \@minus 3\p@
+}
+\normalsize
+\renewcommand{\small}{%
+  \@setfontsize\small\@ixpt\@xpt
+  \abovedisplayskip      6\p@ \@plus 1.5\p@ \@minus 4\p@
+  \abovedisplayshortskip \z@  \@plus 2\p@
+  \belowdisplayskip      \abovedisplayskip
+  \belowdisplayshortskip 3\p@ \@plus 2\p@   \@minus 2\p@
+}
+\renewcommand{\footnotesize}{\@setfontsize\footnotesize\@ixpt\@xpt}
+\renewcommand{\scriptsize}{\@setfontsize\scriptsize\@viipt\@viiipt}
+\renewcommand{\tiny}{\@setfontsize\tiny\@vipt\@viipt}
+\renewcommand{\large}{\@setfontsize\large\@xiipt{14}}
+\renewcommand{\Large}{\@setfontsize\Large\@xivpt{16}}
+\renewcommand{\LARGE}{\@setfontsize\LARGE\@xviipt{20}}
+\renewcommand{\huge}{\@setfontsize\huge\@xxpt{23}}
+\renewcommand{\Huge}{\@setfontsize\Huge\@xxvpt{28}}
+
+% sections with less space
+\providecommand{\section}{}
+\renewcommand{\section}{%
+  \@startsection{section}{1}{\z@}%
+                {-2.0ex \@plus -0.5ex \@minus -0.2ex}%
+                { 1.5ex \@plus  0.3ex \@minus  0.2ex}%
+                {\large\bf\raggedright}%
+}
+\providecommand{\subsection}{}
+\renewcommand{\subsection}{%
+  \@startsection{subsection}{2}{\z@}%
+                {-1.8ex \@plus -0.5ex \@minus -0.2ex}%
+                { 0.8ex \@plus  0.2ex}%
+                {\normalsize\bf\raggedright}%
+}
+\providecommand{\subsubsection}{}
+\renewcommand{\subsubsection}{%
+  \@startsection{subsubsection}{3}{\z@}%
+                {-1.5ex \@plus -0.5ex \@minus -0.2ex}%
+                { 0.5ex \@plus  0.2ex}%
+                {\normalsize\bf\raggedright}%
+}
+\providecommand{\paragraph}{}
+\renewcommand{\paragraph}{%
+  \@startsection{paragraph}{4}{\z@}%
+                {1.5ex \@plus 0.5ex \@minus 0.2ex}%
+                {-1em}%
+                {\normalsize\bf}%
+}
+\providecommand{\subparagraph}{}
+\renewcommand{\subparagraph}{%
+  \@startsection{subparagraph}{5}{\z@}%
+                {1.5ex \@plus 0.5ex \@minus 0.2ex}%
+                {-1em}%
+                {\normalsize\bf}%
+}
+\providecommand{\subsubsubsection}{}
+\renewcommand{\subsubsubsection}{%
+  \vskip5pt{\noindent\normalsize\rm\raggedright}%
+}
+
+% float placement
+\renewcommand{\topfraction      }{0.85}
+\renewcommand{\bottomfraction   }{0.4}
+\renewcommand{\textfraction     }{0.1}
+\renewcommand{\floatpagefraction}{0.7}
+
+\newlength{\@abovecaptionskip}\setlength{\@abovecaptionskip}{7\p@}
+\newlength{\@belowcaptionskip}\setlength{\@belowcaptionskip}{\z@}
+
+\setlength{\abovecaptionskip}{\@abovecaptionskip}
+\setlength{\belowcaptionskip}{\@belowcaptionskip}
+
+% swap above/belowcaptionskip lengths for tables
+\renewenvironment{table}
+  {\setlength{\abovecaptionskip}{\@belowcaptionskip}%
+   \setlength{\belowcaptionskip}{\@abovecaptionskip}%
+   \@float{table}}
+  {\end@float}
+
+% footnote formatting
+\setlength{\footnotesep }{6.65\p@}
+\setlength{\skip\footins}{9\p@ \@plus 4\p@ \@minus 2\p@}
+\renewcommand{\footnoterule}{\kern-3\p@ \hrule width 12pc \kern 2.6\p@}
+\setcounter{footnote}{0}
+
+% paragraph formatting
+\setlength{\parindent}{\z@}
+\setlength{\parskip  }{5.5\p@}
+
+% list formatting
+\setlength{\topsep       }{4\p@ \@plus 1\p@   \@minus 2\p@}
+\setlength{\partopsep    }{1\p@ \@plus 0.5\p@ \@minus 0.5\p@}
+\setlength{\itemsep      }{2\p@ \@plus 1\p@   \@minus 0.5\p@}
+\setlength{\parsep       }{2\p@ \@plus 1\p@   \@minus 0.5\p@}
+\setlength{\leftmargin   }{3pc}
+\setlength{\leftmargini  }{\leftmargin}
+\setlength{\leftmarginii }{2em}
+\setlength{\leftmarginiii}{1.5em}
+\setlength{\leftmarginiv }{1.0em}
+\setlength{\leftmarginv  }{0.5em}
+\def\@listi  {\leftmargin\leftmargini}
+\def\@listii {\leftmargin\leftmarginii
+              \labelwidth\leftmarginii
+              \advance\labelwidth-\labelsep
+              \topsep  2\p@ \@plus 1\p@    \@minus 0.5\p@
+              \parsep  1\p@ \@plus 0.5\p@ \@minus 0.5\p@
+              \itemsep \parsep}
+\def\@listiii{\leftmargin\leftmarginiii
+              \labelwidth\leftmarginiii
+              \advance\labelwidth-\labelsep
+              \topsep    1\p@ \@plus 0.5\p@ \@minus 0.5\p@
+              \parsep    \z@
+              \partopsep 0.5\p@ \@plus 0\p@ \@minus 0.5\p@
+              \itemsep \topsep}
+\def\@listiv {\leftmargin\leftmarginiv
+              \labelwidth\leftmarginiv
+              \advance\labelwidth-\labelsep}
+\def\@listv  {\leftmargin\leftmarginv
+              \labelwidth\leftmarginv
+              \advance\labelwidth-\labelsep}
+\def\@listvi {\leftmargin\leftmarginvi
+              \labelwidth\leftmarginvi
+              \advance\labelwidth-\labelsep}
+
+% create title
+\providecommand{\maketitle}{}
+\renewcommand{\maketitle}{%
+  \par
+  \begingroup
+    \renewcommand{\thefootnote}{\fnsymbol{footnote}}
+    % for perfect author name centering
+    %\renewcommand{\@makefnmark}{\hbox to \z@{$^{\@thefnmark}$\hss}}
+    % The footnote-mark was overlapping the footnote-text,
+    % added the following to fix this problem               (MK)
+    \long\def\@makefntext##1{%
+      \parindent 1em\noindent
+      \hbox to 1.8em{\hss $\m@th ^{\@thefnmark}$}##1
+    }
+    \thispagestyle{empty}
+    \@maketitle
+    \@thanks
+    %\@notice
+  \endgroup
+  \let\maketitle\relax
+  \let\thanks\relax
+}
+
+% rules for title box at top of first page
+\newcommand{\@toptitlebar}{
+  \hrule height 2\p@
+  \vskip 0.25in
+  \vskip -\parskip%
+}
+\newcommand{\@bottomtitlebar}{
+  \vskip 0.29in
+  \vskip -\parskip
+  \hrule height 2\p@
+  \vskip 0.09in%
+}
+
+% create title (includes both anonymized and non-anonymized versions)
+\providecommand{\@maketitle}{}
+\renewcommand{\@maketitle}{%
+  \vbox{%
+    \hsize\textwidth
+    \linewidth\hsize
+    \vskip 0.1in
+    \@toptitlebar
+    \centering
+    {\LARGE\sc \@title\par}
+    \@bottomtitlebar
+    \textsc{\undertitle}\\
+    \vskip 0.1in
+    \def\And{%
+      \end{tabular}\hfil\linebreak[0]\hfil%
+      \begin{tabular}[t]{c}\bf\rule{\z@}{24\p@}\ignorespaces%
+    }
+    \def\AND{%
+      \end{tabular}\hfil\linebreak[4]\hfil%
+      \begin{tabular}[t]{c}\bf\rule{\z@}{24\p@}\ignorespaces%
+    }
+    \begin{tabular}[t]{c}\bf\rule{\z@}{24\p@}\@author\end{tabular}%
+  \vskip 0.4in \@minus 0.1in \center{\@date}   \vskip 0.2in
+  }
+}
+
+% add conference notice to bottom of first page
+\newcommand{\ftype@noticebox}{8}
+\newcommand{\@notice}{%
+  % give a bit of extra room back to authors on first page
+  \enlargethispage{2\baselineskip}%
+  \@float{noticebox}[b]%
+    \footnotesize\@noticestring%
+  \end@float%
+}
+
+% abstract styling
+\renewenvironment{abstract}
+{
+  \centerline
+  {\large \bfseries \scshape Abstract}
+  \begin{quote}
+}
+{
+  \end{quote}
+}
+
+\endinput
+
+```
+
+
+## src/features/texademia/assets.py
+
+```py
+# src/features/texademia/assets.py
+from pathlib import Path
+
+ASSETS_DIR = Path(__file__).parent / "assets"
+
+
+def get_template_asset_files(template: str) -> list[Path]:
+    """Extra .sty/.cls/.bst files a template needs at compile time."""
+    template_dir = ASSETS_DIR / template
+    if not template_dir.exists():
+        return []
+    return [f for f in template_dir.iterdir() if f.is_file()]
+
+```
+
+
 ## src/features/texademia/models/__init__.py
 
 ```py
@@ -928,16 +1269,17 @@ class Document(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     user_id: uuid.UUID = Field(foreign_key="users.id", nullable=False, index=True)
     title: str = Field(default="Untitled", nullable=False)
-    template: str = Field(
-        default="default", nullable=False
-    )  # "default" | "arxiv" | "ieee"
+    template: str = Field(default="default", nullable=False)
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
     updated_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
 
     user: "User" = Relationship()
     files: List["DocumentFile"] = Relationship(
         back_populates="document",
-        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "lazy": "selectin",
+        },
     )
 
 
@@ -1028,7 +1370,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.database.session import get_db
 from src.features.auth.models import User
-from src.features.auth.router import current_active_user
+from src.features.auth.dev_user import get_dev_user
 from src.features.texademia.models.document import Document, DocumentFile
 from src.features.texademia.schemas.document import (
     DocumentCreate,
@@ -1062,7 +1404,7 @@ async def _get_owned_document(
 @router.get("", response_model=List[DocumentRead])
 async def list_documents(
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(current_active_user),
+    user: User = Depends(get_dev_user),
 ):
     statement = select(Document).where(Document.user_id == user.id)
     result = await session.exec(statement)
@@ -1073,7 +1415,7 @@ async def list_documents(
 async def create_document(
     doc_in: DocumentCreate,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(current_active_user),
+    user: User = Depends(get_dev_user),
 ):
     document = Document(title=doc_in.title, template=doc_in.template, user_id=user.id)
     session.add(document)
@@ -1096,7 +1438,7 @@ async def create_document(
 async def get_document(
     document_id: uuid.UUID,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(current_active_user),
+    user: User = Depends(get_dev_user),
 ):
     return await _get_owned_document(document_id, session, user)
 
@@ -1106,7 +1448,7 @@ async def update_document(
     document_id: uuid.UUID,
     doc_in: DocumentUpdate,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(current_active_user),
+    user: User = Depends(get_dev_user),
 ):
     document = await _get_owned_document(document_id, session, user)
     for key, value in doc_in.model_dump(exclude_unset=True).items():
@@ -1121,7 +1463,7 @@ async def update_document(
 async def delete_document(
     document_id: uuid.UUID,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(current_active_user),
+    user: User = Depends(get_dev_user),
 ):
     document = await _get_owned_document(document_id, session, user)
     await session.delete(document)
@@ -1134,7 +1476,7 @@ async def update_file(
     file_id: uuid.UUID,
     file_in: FileUpdate,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(current_active_user),
+    user: User = Depends(get_dev_user),
 ):
     document = await _get_owned_document(document_id, session, user)
     file = next((f for f in document.files if f.id == file_id), None)
@@ -1151,11 +1493,11 @@ async def update_file(
 async def compile_document(
     document_id: uuid.UUID,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(current_active_user),
+    user: User = Depends(get_dev_user),
 ):
     document = await _get_owned_document(document_id, session, user)
     try:
-        pdf_url = await compile_latex(document.files, document.id)
+        pdf_url = await compile_latex(document.files, document.id, document.template)
     except CompilerError as e:
         raise HTTPException(
             status_code=422, detail={"message": e.message, "log": e.log}
@@ -1368,12 +1710,13 @@ import tempfile
 import uuid
 from pathlib import Path
 
+from src.features.texademia.assets import get_template_asset_files
 from src.features.texademia.models.document import DocumentFile
 
 OUTPUT_DIR = Path("compiled_pdfs")
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-COMPILE_TIMEOUT_SECONDS = 30
+COMPILE_TIMEOUT_SECONDS = 120
 
 
 class CompileError(Exception):
@@ -1383,7 +1726,9 @@ class CompileError(Exception):
         super().__init__(message)
 
 
-async def compile_latex(files: list[DocumentFile], document_id: uuid.UUID) -> str:
+async def compile_latex(
+    files: list[DocumentFile], document_id: uuid.UUID, template: str
+) -> str:
     if not shutil.which("latexmk"):
         raise CompileError("latexmk is not installed on the server.")
 
@@ -1393,6 +1738,10 @@ async def compile_latex(files: list[DocumentFile], document_id: uuid.UUID) -> st
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
+
+        for asset in get_template_asset_files(template):
+            shutil.copy(asset, tmp_path / asset.name)
+
         for f in files:
             (tmp_path / f.name).write_text(f.content, encoding="utf-8")
 
