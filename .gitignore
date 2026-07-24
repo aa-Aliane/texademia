@@ -1,13 +1,60 @@
-node_modules
+# ==========================================
+# React / Node / Web Build Outputs & Tools
+# ==========================================
+node_modules/
+dist/
+dist-ssr/
+build/
 .DS_Store
-dist
-dist-ssr
 *.local
 .env
-.nitro
-.tanstack
-.wrangler
-.output
-.vinxi
+.env.*
+!.env.example
+.nitro/
+.tanstack/
+.wrangler/
+.output/
+.vinxi/
 __unconfig*
 todos.json
+
+# Logs and runtime data
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ==========================================
+# FastAPI / Python / Virtual Environments
+# ==========================================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments (venv, virtualenv, conda)
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# FastAPI / Database / Local storage
+*.db
+*.sqlite
+*.sqlite3
+
+# Testing & Coverage outputs (pytest, coverage)
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+examples/
