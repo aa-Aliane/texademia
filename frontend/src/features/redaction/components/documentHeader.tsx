@@ -1,23 +1,35 @@
 // redaction/components/documentHeader.tsx
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Group, Text, TextInput, Loader, ActionIcon } from "@mantine/core";
-import { IconArrowLeft } from "@tabler/icons-react";
+import {
+  Group,
+  Text,
+  TextInput,
+  Loader,
+  ActionIcon,
+  Progress,
+  Stack,
+  Tooltip,
+} from "@mantine/core";
+import { IconArrowLeft, IconCheck, IconX } from "@tabler/icons-react";
 import { AppShellHeaderPortal } from "#/shared/ui/app-shell/headerPortal";
 import { CompileButton } from "./compileButton";
 import { DocumentMenu } from "./documentMenu";
-
-type CompileStatus = "idle" | "compiling" | "success" | "error";
+import type { CompilePhase } from "../hooks/useCompileDocument";
 
 interface DocumentHeaderProps {
   title: string;
   onTitleSave: (title: string) => void;
   isSavingTitle: boolean;
   onCompile: () => void;
-  compileStatus: CompileStatus;
-  compileError?: string;
+  compilePhase: CompilePhase;
+  compileProgress: number;
+  compileMessage: string;
+  compileError: string | null;
+  compileLog: string | null;
   template: string;
   pdfUrl: string | null;
+  onDuplicateClick: () => void; // NEW
 }
 
 function EditableTitle({
@@ -71,18 +83,90 @@ function EditableTitle({
   );
 }
 
-function CompileStatusLabel({ status, error }: { status: CompileStatus; error?: string }) {
-  if (status === "compiling") {
+function CompileStatusIndicator({
+  phase,
+  progress,
+  message,
+  error,
+  log,
+}: {
+  phase: CompilePhase;
+  progress: number;
+  message: string;
+  error: string | null;
+  log: string | null;
+}) {
+  if (phase === "idle") {
+    return <Text size="xs" c="dimmed">Not compiled yet</Text>;
+  }
+
+  if (phase === "saving") {
     return (
       <Group gap={4} wrap="nowrap">
         <Loader size="xs" />
-        <Text size="xs" c="dimmed">Compiling…</Text>
+        <Text size="xs" c="dimmed">Saving…</Text>
       </Group>
     );
   }
-  if (status === "success") return <Text size="xs" c="teal">Compiled</Text>;
-  if (status === "error") return <Text size="xs" c="red">{error ?? "Compile failed"}</Text>;
-  return <Text size="xs" c="dimmed">Not compiled yet</Text>;
+
+  if (phase === "queued") {
+    return (
+      <Group gap={4} wrap="nowrap">
+        <Loader size="xs" />
+        <Text size="xs" c="dimmed">Queued…</Text>
+      </Group>
+    );
+  }
+
+  if (phase === "running") {
+    return (
+      <Stack gap={4} w={180}>
+        <Group gap={4} wrap="nowrap" justify="space-between">
+          <Group gap={4} wrap="nowrap">
+            <Loader size="xs" />
+            <Text size="xs" c="dimmed" truncate>{message || "Compiling…"}</Text>
+          </Group>
+          <Text size="xs" c="dimmed" w={30} ta="right">{progress}%</Text>
+        </Group>
+        <Progress value={progress} size="xs" animated color="blue" />
+      </Stack>
+    );
+  }
+
+  if (phase === "done") {
+    return (
+      <Group gap={4} wrap="nowrap">
+        <IconCheck size={14} color="teal" />
+        <Text size="xs" c="teal">Compiled</Text>
+      </Group>
+    );
+  }
+
+  if (phase === "error") {
+    return (
+      <Tooltip
+        label={
+          <Stack gap={4} maw={400}>
+            <Text size="xs" c="red">{error}</Text>
+            {log && (
+              <Text size="xs" c="dimmed" style={{ fontFamily: "monospace", whiteSpace: "pre-wrap" }}>
+                {log.slice(0, 800)}{log.length > 800 ? "…" : ""}
+              </Text>
+            )}
+          </Stack>
+        }
+        multiline
+        withArrow
+      >
+        <Group gap={4} wrap="nowrap" style={{ cursor: "help" }}>
+          <IconX size={14} color="red" />
+          <Text size="xs" c="red">Compile failed</Text>
+        </Group>
+      </Tooltip>
+    );
+  }
+
+  return null;
 }
 
 export function DocumentHeader({
@@ -90,11 +174,18 @@ export function DocumentHeader({
   onTitleSave,
   isSavingTitle,
   onCompile,
-  compileStatus,
+  compilePhase,
+  compileProgress,
+  compileMessage,
   compileError,
+  compileLog,
   template,
   pdfUrl,
+  onDuplicateClick, // NEW
 }: DocumentHeaderProps) {
+  const isCompiling = compilePhase === "saving" || compilePhase === "queued" || compilePhase === "running";
+  const hasCompiledBefore = compilePhase === "done" || !!pdfUrl; // NEW
+
   return (
     <>
       <AppShellHeaderPortal slot="center">
@@ -108,9 +199,15 @@ export function DocumentHeader({
 
       <AppShellHeaderPortal slot="actions">
         <Group gap="md" wrap="nowrap">
-          <CompileStatusLabel status={compileStatus} error={compileError} />
-          <DocumentMenu template={template} pdfUrl={pdfUrl} />
-          <CompileButton onCompile={onCompile} isCompiling={compileStatus === "compiling"} />
+          <CompileStatusIndicator
+            phase={compilePhase}
+            progress={compileProgress}
+            message={compileMessage}
+            error={compileError}
+            log={compileLog}
+          />
+          <DocumentMenu template={template} pdfUrl={pdfUrl} onDuplicateClick={onDuplicateClick} />
+          <CompileButton onCompile={onCompile} isCompiling={isCompiling} hasCompiledBefore={hasCompiledBefore} />
         </Group>
       </AppShellHeaderPortal>
     </>

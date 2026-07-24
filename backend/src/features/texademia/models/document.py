@@ -1,11 +1,15 @@
 import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, List
+from pathlib import Path
 
 from sqlmodel import Field, Relationship, SQLModel
+from sqlalchemy import Column, JSON
 
 if TYPE_CHECKING:
     from src.features.auth.models import User
+
+_COMPILED_PDF_DIR = Path("compiled_pdfs")
 
 
 class Document(SQLModel, table=True):
@@ -27,6 +31,13 @@ class Document(SQLModel, table=True):
         },
     )
 
+    @property
+    def pdf_url(self) -> str | None:
+        pdf_path = _COMPILED_PDF_DIR / f"{self.id}.pdf"
+        if pdf_path.exists():
+            return f"/static/compiled/{self.id}.pdf"
+        return None
+
 
 class DocumentFile(SQLModel, table=True):
     __tablename__ = "document_files"
@@ -38,5 +49,6 @@ class DocumentFile(SQLModel, table=True):
     name: str = Field(nullable=False)  # "main.tex", "references.bib"
     language: str = Field(default="latex", nullable=False)  # "latex" | "bibtex"
     content: str = Field(default="", nullable=False)
+    line_authors: list[dict] | None = Field(default=None, sa_column=Column(JSON))
 
     document: "Document" = Relationship(back_populates="files")

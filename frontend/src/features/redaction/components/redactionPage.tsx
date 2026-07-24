@@ -1,13 +1,15 @@
 // redaction/components/redactionPage.tsx
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { Editor } from "./editor";
 import { PdfPreview } from "./pdfPreview";
 import { FileTabs, PREVIEW_TAB_ID } from "./fileTabs";
 import { DocumentHeader } from "./documentHeader";
+import { DuplicateDocumentDialog } from "./duplicateDocumentDialog"; // NEW
 import { useCompileDocument } from "../hooks/useCompileDocument";
 import { useUpdateDocumentTitle } from "../hooks/useUpdateDocumentTitle";
-import { documentQueryOptions } from "../api/redaction";
+import { documentQueryOptions, duplicateDocument } from "../api/redaction"; // CHANGED
 import type { ProjectFile } from "../types/redaction";
 
 interface RedactionPageProps {
@@ -16,27 +18,51 @@ interface RedactionPageProps {
 
 export function RedactionPage({ documentId }: RedactionPageProps) {
   const { data: document } = useQuery(documentQueryOptions(documentId));
+  const navigate = useNavigate(); // NEW
+  const queryClient = useQueryClient(); // NEW
 
-  const [files, setFiles] = useState<ProjectFile[]>(() => document?.files ?? []);
-  const [activeFileId, setActiveFileId] = useState<string | null>(
-    () => document?.files[0]?.id ?? null
-  );
+  const [files, setFiles] = useState<ProjectFile[]>([]);
+  const [activeFileId, setActiveFileId] = useState<string | null>(null);
   const [activeTabId, setActiveTabId] = useState<string>("");
+  const [duplicateDialogOpened, setDuplicateDialogOpened] = useState(false); // NEW
 
   const {
-    mutate: compile,
-    data: compileResult,
-    isPending: isCompiling,
-    isSuccess: isCompileSuccess,
-    isError: isCompileError,
+    compile,
+    phase: compilePhase,
+    progress: compileProgress,
+    message: compileMessage,
+    pdfUrl,
     error: compileError,
-  } = useCompileDocument(documentId);
+    log: compileLog,
+    isDone: isCompileSuccess,
+  } = useCompileDocument(documentId, document?.pdfUrl ?? null);
 
   const { mutate: saveTitle, isPending: isSavingTitle } = useUpdateDocumentTitle(documentId);
 
-  if (!document || !activeFileId) return null;
+  // NEW: duplicate mutation
+  const { mutate: duplicate, isPending: isDuplicating } = useMutation({
+    mutationFn: (opts: { template: string; title: string }) =>
+      duplicateDocument(documentId, opts),
+    onSuccess: (newDoc) => {
+      setDuplicateDialogOpened(false);
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+      navigate({ to: "/redaction/$documentId", params: { documentId: newDoc.id } });
+    },
+  });
 
-  const currentTabId = activeTabId || activeFileId;
+  useEffect(() => {
+    if (document?.files) {
+      setFiles(document.files);
+      if (!activeFileId) {
+        setActiveFileId(document.files[0]?.id ?? null);
+        if (document.pdfUrl && !activeTabId) setActiveTabId(PREVIEW_TAB_ID);
+      }
+    }
+  }, [document]);
+
+  if (!document) return null;
+
+  const currentTabId = activeTabId || activeFileId || "";
   const activeFile = files.find((f) => f.id === currentTabId);
 
   const updateActiveFileContent = (content: string) => {
@@ -48,13 +74,11 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
     if (id !== PREVIEW_TAB_ID) setActiveFileId(id);
   };
 
-  const compileStatus = isCompiling
-    ? "compiling"
-    : isCompileError
-    ? "error"
-    : isCompileSuccess
-    ? "success"
-    : "idle";
+  useEffect(() => {
+    if (isCompileSuccess && pdfUrl) {
+      setActiveTabId(PREVIEW_TAB_ID);
+    }
+  }, [isCompileSuccess, pdfUrl]);
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
@@ -63,25 +87,40 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
         onTitleSave={saveTitle}
         isSavingTitle={isSavingTitle}
         onCompile={() => compile(files)}
-        compileStatus={compileStatus}
-        compileError={(compileError as any)?.message}
+        compilePhase={compilePhase}
+        compileProgress={compileProgress}
+        compileMessage={compileMessage}
+        compileError={compileError}
+        compileLog={compileLog}
         template={document.template}
-        pdfUrl={compileResult?.pdfUrl ?? null}
+        pdfUrl={pdfUrl}
+        onDuplicateClick={() => setDuplicateDialogOpened(true)} // NEW
       />
 
       <FileTabs files={files} activeTabId={currentTabId} onSelect={handleSelectTab} />
 
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
         {currentTabId === PREVIEW_TAB_ID ? (
-          <PdfPreview pdfUrl={compileResult?.pdfUrl ?? null} />
+          <PdfPreview pdfUrl={pdfUrl} />
         ) : activeFile ? (
           <Editor
             value={activeFile.content}
             language={activeFile.language}
             onChange={updateActiveFileContent}
+            lineAuthors={activeFile.lineAuthors}
           />
         ) : null}
       </div>
+
+      {/* NEW */}
+      <DuplicateDocumentDialog
+        opened={duplicateDialogOpened}
+        onClose={() => setDuplicateDialogOpened(false)}
+        onDuplicate={(opts) => duplicate(opts)}
+        isDuplicating={isDuplicating}
+        sourceTitle={document.title}
+        sourceTemplate={document.template}
+      />
     </div>
   );
 }

@@ -8,36 +8,25 @@ const TEMPLATES = [
   { value: "acl", label: "ACL", description: "ACL conference/workshop style" },
 ];
 
-interface CreateDocumentDialogProps {
+interface DuplicateDocumentDialogProps {
   opened: boolean;
   onClose: () => void;
-  onCreate: (title: string, template: string) => void;
-  isCreating: boolean;
+  onDuplicate: (opts: { template: string; title: string }) => void;
+  isDuplicating: boolean;
+  sourceTitle: string;
+  sourceTemplate: string;
 }
 
-export function CreateDocumentDialog({
-  opened,
-  onClose,
-  onCreate,
-  isCreating,
-}: CreateDocumentDialogProps) {
-  const [title, setTitle] = useState("Untitled");
-  const [template, setTemplate] = useState("default");
-
-  const handleSubmit = () => {
-    onCreate(title.trim() || "Untitled", template);
-  };
+export function DuplicateDocumentDialog({
+  opened, onClose, onDuplicate, isDuplicating, sourceTitle, sourceTemplate,
+}: DuplicateDocumentDialogProps) {
+  const [title, setTitle] = useState(`${sourceTitle} (copy)`);
+  const [template, setTemplate] = useState(sourceTemplate);
 
   return (
-    <Modal opened={opened} onClose={onClose} title="New document" centered>
+    <Modal opened={opened} onClose={onClose} title="Duplicate document" centered>
       <Stack gap="md">
-        <TextInput
-          label="Title"
-          value={title}
-          onChange={(e) => setTitle(e.currentTarget.value)}
-          data-autofocus
-        />
-
+        <TextInput label="Title" value={title} onChange={(e) => setTitle(e.currentTarget.value)} data-autofocus />
         <Stack gap={4}>
           <Text size="sm" fw={500}>Template</Text>
           <SegmentedControl
@@ -50,9 +39,8 @@ export function CreateDocumentDialog({
             {TEMPLATES.find((t) => t.value === template)?.description}
           </Text>
         </Stack>
-
-        <Button onClick={handleSubmit} loading={isCreating} fullWidth>
-          Create
+        <Button onClick={() => onDuplicate({ template, title: title.trim() || sourceTitle })} loading={isDuplicating} fullWidth>
+          Duplicate
         </Button>
       </Stack>
     </Modal>

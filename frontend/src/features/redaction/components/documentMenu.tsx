@@ -11,15 +11,17 @@ import {
 interface DocumentMenuProps {
   template: string;
   pdfUrl: string | null;
+  onDuplicateClick: () => void; // NEW
 }
 
 const TEMPLATE_LABELS: Record<string, string> = {
   default: "Default",
   arxiv: "arXiv",
   ieee: "IEEE",
+  acl: "ACL",
 };
 
-export function DocumentMenu({ template, pdfUrl }: DocumentMenuProps) {
+export function DocumentMenu({ template, pdfUrl, onDuplicateClick }: DocumentMenuProps) {
   return (
     <Menu position="bottom-end" shadow="md" width={240}>
       <Menu.Target>
@@ -51,7 +53,7 @@ export function DocumentMenu({ template, pdfUrl }: DocumentMenuProps) {
           Download source (.zip)
         </Menu.Item>
 
-        <Menu.Item leftSection={<IconCopy size={16} />} disabled>
+        <Menu.Item leftSection={<IconCopy size={16} />} onClick={onDuplicateClick}>
           Duplicate
         </Menu.Item>
 

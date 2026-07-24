@@ -5,3 +5,5 @@ asyncpg
 pydantic-settings
 python-dotenv
 fastapi-users[sqlalchemy]
+redis
+rq

@@ -1,5 +1,5 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { createDocument, getDocument } from "../api/redaction";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createDocument, deleteDocument, getDocument } from "../api/redaction";
 
 export function useDocument(documentId: string | null) {
   return useQuery({
@@ -13,5 +13,16 @@ export function useCreateDocument() {
   return useMutation({
     mutationFn: ({ title, template }: { title: string; template: string }) =>
       createDocument(title, template),
+  });
+}
+
+// NEW
+export function useDeleteDocument() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (documentId: string) => deleteDocument(documentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+    },
   });
 }

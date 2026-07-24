@@ -1,0 +1,25 @@
+.actionsCell {
+  position: relative;
+  overflow: hidden;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+
+  transition: opacity 120ms ease;
+  z-index: 900;
+
+}
+
+.actionsCell:hover .overlay {
+  opacity: 1;
+}
+
+.row {
+  cursor: pointer;
+}

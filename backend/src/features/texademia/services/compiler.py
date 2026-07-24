@@ -1,16 +1,20 @@
-import asyncio
-import shutil
-import tempfile
+# src/features/texademia/services/compiler.py
 import uuid
 from pathlib import Path
 
-from src.features.texademia.assets import get_template_asset_files
-from src.features.texademia.models.document import DocumentFile
+import redis
+from rq import Queue
+
+from src.config.settings import settings
+from src.features.texademia.models.document import (
+    DocumentFile,
+)
+
+redis_conn = redis.from_url(settings.REDIS_URL)
+compile_queue = Queue("latex_compile", connection=redis_conn)
 
 OUTPUT_DIR = Path("compiled_pdfs")
 OUTPUT_DIR.mkdir(exist_ok=True)
-
-COMPILE_TIMEOUT_SECONDS = 120
 
 
 class CompileError(Exception):
@@ -20,54 +24,53 @@ class CompileError(Exception):
         super().__init__(message)
 
 
-async def compile_latex(
-    files: list[DocumentFile], document_id: uuid.UUID, template: str
+def enqueue_compile_job(
+    document_id: uuid.UUID, files: list[DocumentFile], template: str
 ) -> str:
-    if not shutil.which("latexmk"):
-        raise CompileError("latexmk is not installed on the server.")
+    """
+    Enqueues a compilation job and returns the job ID for polling.
+    """
+    files_data = [
+        {"id": str(f.id), "name": f.name, "language": f.language, "content": f.content}
+        for f in files
+    ]
 
-    main_file = next((f for f in files if f.name.endswith(".tex")), None)
-    if main_file is None:
-        raise CompileError("No .tex file found in the project.")
+    from src.features.texademia.services.compiler_worker import compile_latex_job
 
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_path = Path(tmp)
+    job = compile_queue.enqueue(
+        compile_latex_job,
+        str(document_id),
+        files_data,
+        template,
+        job_timeout=180,
+        result_ttl=3600,
+    )
+    return job.id
 
-        for asset in get_template_asset_files(template):
-            shutil.copy(asset, tmp_path / asset.name)
 
-        for f in files:
-            (tmp_path / f.name).write_text(f.content, encoding="utf-8")
+def get_job_status(job_id: str) -> dict:
+    """Poll job status from Redis."""
+    from rq.job import Job
 
-        cmd = [
-            "latexmk",
-            "-pdf",
-            "-interaction=nonstopmode",
-            "-halt-on-error",
-            "-no-shell-escape",
-            main_file.name,
-        ]
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            cwd=tmp_path,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-        )
-        try:
-            stdout, _ = await asyncio.wait_for(
-                proc.communicate(), timeout=COMPILE_TIMEOUT_SECONDS
-            )
-        except asyncio.TimeoutError:
-            proc.kill()
-            raise CompileError("Compilation timed out.")
+    job = Job.fetch(job_id, connection=redis_conn)
 
-        log_text = stdout.decode(errors="replace")
-        pdf_path = tmp_path / Path(main_file.name).with_suffix(".pdf").name
-
-        if proc.returncode != 0 or not pdf_path.exists():
-            raise CompileError("LaTeX compilation failed.", log=log_text)
-
-        dest_path = OUTPUT_DIR / f"{document_id}.pdf"
-        shutil.copyfile(pdf_path, dest_path)
-
-    return f"/static/compiled/{document_id}.pdf"
+    if job.is_finished:
+        return {
+            "status": "done",
+            "result": job.result,
+        }
+    elif job.is_failed:
+        meta = job.meta or {}
+        return {
+            "status": "error",
+            "error": str(job.exc_info) if job.exc_info else "Unknown error",
+            "log": meta.get("log", ""),
+        }
+    else:
+        meta = job.meta or {}
+        return {
+            "status": meta.get("status", "queued"),
+            "step": meta.get("step", "waiting"),
+            "percent": meta.get("percent", 0),
+            "message": meta.get("message", "Job is queued..."),
+        }
