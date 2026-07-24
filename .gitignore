@@ -1,13 +1,66 @@
-node_modules
-.DS_Store
-dist
-dist-ssr
-*.local
+# ==========================================
+# 🐍 Python / FastAPI / Backend
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environments
 .env
-.nitro
-.tanstack
-.wrangler
-.output
-.vinxi
+*.env
+
+# EXCEPT template files:
+!.env.example
+!.env.template
+!.env.sample
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# Testing & Logs
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# Database / Storage (if using local SQLite or temp files)
+*.db
+*.sqlite3
+
+# ==========================================
+# ⚡ Node / Frontend (Your Existing Items)
+# ==========================================
+node_modules/
+dist/
+dist-ssr/
+*.local
+.nitro/
+.tanstack/
+.wrangler/
+.output/
+.vinxi/
 __unconfig*
 todos.json
+
+# ==========================================
+# 💻 OS & Editor Junk
+# ==========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE settings
+.vscode/
+.idea/
+*.swp
+*.swo
