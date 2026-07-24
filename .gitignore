@@ -1,45 +1,15 @@
 # ==========================================
-# 🐍 Python / FastAPI / Backend
-# ==========================================
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-
-# Environments
-.env
-*.env
-
-# EXCEPT template files:
-!.env.example
-!.env.template
-!.env.sample
-
-# Virtual environments
-.venv/
-venv/
-ENV/
-env/
-env.bak/
-venv.bak/
-
-# Testing & Logs
-.pytest_cache/
-.coverage
-htmlcov/
-*.log
-
-# Database / Storage (if using local SQLite or temp files)
-*.db
-*.sqlite3
-
-# ==========================================
-# ⚡ Node / Frontend (Your Existing Items)
+# React / Node / Web Build Outputs & Tools
 # ==========================================
 node_modules/
 dist/
 dist-ssr/
+build/
+.DS_Store
 *.local
+.env
+.env.*
+!.env.example
 .nitro/
 .tanstack/
 .wrangler/
@@ -48,19 +18,43 @@ dist-ssr/
 __unconfig*
 todos.json
 
-# ==========================================
-# 💻 OS & Editor Junk
-# ==========================================
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
+# Logs and runtime data
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# IDE settings
+# ==========================================
+# FastAPI / Python / Virtual Environments
+# ==========================================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments (venv, virtualenv, conda)
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# FastAPI / Database / Local storage
+*.db
+*.sqlite
+*.sqlite3
+
+# Testing & Coverage outputs (pytest, coverage)
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# IDE & Editor files
 .vscode/
 .idea/
 *.swp
 *.swo
+examples/

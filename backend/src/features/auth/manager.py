@@ -1,6 +1,6 @@
 import uuid
 from typing import Optional
-
+import os
 from fastapi import Depends, Request
 from fastapi_users import BaseUserManager, UUIDIDMixin
 from fastapi_users.authentication import (
@@ -54,7 +54,7 @@ cookie_transport = CookieTransport(
     cookie_name="auth_token",
     cookie_max_age=3600,
     cookie_samesite="lax",
-    cookie_secure=False,
+    cookie_secure=os.getenv("ENVIRONMENT") == "production",
     cookie_path="/",
 )
 
