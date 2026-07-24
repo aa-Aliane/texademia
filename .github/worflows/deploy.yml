@@ -1,0 +1,21 @@
+name: Deploy to server
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+              cd /home/aliane/web/apps/texademia
+              git pull origin main
+              docker compose -f docker-compose.production.yml up -d --build --remove-orphans
+              docker exec nginx-proxy nginx -s reload
