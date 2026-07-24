@@ -1,0 +1,56 @@
+frontend/src
+├── features
+│   └── redaction
+│       ├── api
+│       │   └── redaction.ts
+│       ├── components
+│       │   ├── blameExtension.ts
+│       │   ├── compileButton.tsx
+│       │   ├── createDocumentDialog.tsx
+│       │   ├── documentHeader.tsx
+│       │   ├── documentMenu.tsx
+│       │   ├── documentsListPage.module.css
+│       │   ├── documentsListPage.tsx
+│       │   ├── duplicateDocumentDialog.tsx
+│       │   ├── editor.tsx
+│       │   ├── fileTabs.tsx
+│       │   ├── pdfPreview.tsx
+│       │   └── redactionPage.tsx
+│       ├── hooks
+│       │   ├── useCompileDocument.ts
+│       │   ├── useDocuments.ts
+│       │   └── useUpdateDocumentTitle.ts
+│       ├── index.ts
+│       ├── store
+│       │   └── editorStore.ts
+│       └── types
+│           └── redaction.ts
+├── integrations
+│   └── tanstack-query
+│       ├── devtools.tsx
+│       └── root-provider.tsx
+├── router.tsx
+├── routes
+│   ├── index.tsx
+│   ├── redaction.$documentId.tsx
+│   ├── redaction.index.tsx
+│   └── __root.tsx
+├── routeTree.gen.ts
+├── shared
+│   ├── api
+│   │   └── client.ts
+│   ├── styles
+│   │   ├── animations.module.css
+│   │   └── tokens.module.css
+│   ├── theme
+│   │   └── theme.ts
+│   └── ui
+│       ├── app-shell
+│       │   ├── appShell.tsx
+│       │   └── headerPortal.tsx
+│       └── card
+│           ├── card.module.css
+│           └── card.tsx
+└── styles.css
+
+17 directories, 36 files

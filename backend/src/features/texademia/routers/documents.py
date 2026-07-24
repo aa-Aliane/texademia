@@ -12,7 +12,7 @@ from datetime import datetime
 
 from src.database.session import get_db
 from src.features.auth.models import User
-from src.features.auth.dev_user import get_dev_user
+from src.features.auth.router import current_active_user
 from src.features.texademia.models.document import Document, DocumentFile
 from src.features.texademia.schemas.document import (
     DocumentCreate,
@@ -88,7 +88,7 @@ async def _get_owned_file(
 @router.get("", response_model=List[DocumentRead])
 async def list_documents(
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(get_dev_user),
+    user: User = Depends(current_active_user),
 ):
     statement = select(Document).where(Document.user_id == user.id)
     result = await session.exec(statement)
@@ -99,7 +99,7 @@ async def list_documents(
 async def create_document(
     doc_in: DocumentCreate,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(get_dev_user),
+    user: User = Depends(current_active_user),
 ):
     document = Document(title=doc_in.title, template=doc_in.template, user_id=user.id)
     session.add(document)
@@ -121,7 +121,7 @@ async def create_document(
 async def get_document(
     document_id: uuid.UUID,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(get_dev_user),
+    user: User = Depends(current_active_user),
 ):
     return await _get_owned_document(document_id, session, user)
 
@@ -131,7 +131,7 @@ async def update_document(
     document_id: uuid.UUID,
     doc_in: DocumentUpdate,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(get_dev_user),
+    user: User = Depends(current_active_user),
 ):
     document = await _get_owned_document(document_id, session, user)
 
@@ -150,7 +150,7 @@ async def update_document(
 async def delete_document(
     document_id: uuid.UUID,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(get_dev_user),
+    user: User = Depends(current_active_user),
 ):
     document = await _get_owned_document(document_id, session, user)
     await session.delete(document)
@@ -163,7 +163,7 @@ async def update_file(
     file_id: uuid.UUID,
     file_in: FileUpdate,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(get_dev_user),
+    user: User = Depends(current_active_user),
 ):
     file = await _get_owned_file(document_id, file_id, session, user)
     file.line_authors = _update_line_authors(
@@ -181,7 +181,7 @@ async def update_file(
 async def compile_document(
     document_id: uuid.UUID,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(get_dev_user),
+    user: User = Depends(current_active_user),
 ):
     document = await _get_owned_document(document_id, session, user)
 
@@ -202,7 +202,7 @@ async def duplicate_document(
     document_id: uuid.UUID,
     payload: DocumentDuplicate,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(get_dev_user),
+    user: User = Depends(current_active_user),
 ):
     source = await _get_owned_document(document_id, session, user)
     target_template = payload.template or source.template

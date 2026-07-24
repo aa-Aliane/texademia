@@ -4509,6 +4509,18 @@ _COMPAT_SHIM = "\\providecommand{\\keywords}[1]{{\\def\\and{, }\\par\\noindent\\
 
 _CONFLICTING_PACKAGES = {"authblk", "achemso", "elsarticle"}
 
+# --- body overflow fix (NEW) -------------------------------------------------
+_INCLUDEGRAPHICS_RE = re.compile(r"\\includegraphics(\[[^\]]*\])?\{([^}]*)\}")
+_ENV_BLOCK_RE = re.compile(r"\\begin\{(figure\*?|table\*?)\}.*?\\end\{\1\}", re.DOTALL)
+# Any of these are "raw content" environments that can silently keep the
+# source template's wider sizing (a fixed-width tabular, or a tikzpicture
+# built with absolute node/coordinate widths) — both get wrapped in
+# \resizebox the same way, since resizebox works on arbitrary box content,
+# not just tables.
+_CONTENT_ENV_RE = re.compile(r"\\begin\{(tabular\*?|tikzpicture)\}")
+_ALREADY_WRAPPED_RE = re.compile(r"\\(resizebox|adjustbox)")
+# -----------------------------------------------------------------------------
+
 
 def _split_preamble(tex_source: str) -> tuple[str, str]:
     """(everything before \\begin{document}, everything from \\begin{document} onward)."""
@@ -4683,6 +4695,88 @@ def _extra_newcommand_lines(
     return lines
 
 
+def _target_width_macro(env_name: str) -> str:  # NEW
+    """Starred (spanning) envs get \\textwidth; single-column envs get \\columnwidth."""
+    return "\\textwidth" if env_name.endswith("*") else "\\columnwidth"
+
+
+def _fix_includegraphics_widths(block: str, width_macro: str) -> str:  # NEW
+    def _replace(m: re.Match) -> str:
+        opts, path = m.group(1) or "", m.group(2)
+        # Already relative to the right thing (columnwidth/linewidth/textwidth) — leave it.
+        if opts and re.search(r"width\s*=\s*\\(column|line|text)width", opts):
+            return m.group(0)
+        if not opts:
+            return f"\\includegraphics[width={width_macro}]{{{path}}}"
+        if "width=" in opts:
+            opts = re.sub(r"width\s*=\s*[^,\]]+", f"width={width_macro}", opts)
+        else:
+            opts = opts[:-1] + f",width={width_macro}]"
+        return f"\\includegraphics{opts}{{{path}}}"
+
+    return _INCLUDEGRAPHICS_RE.sub(_replace, block)
+
+
+def _fix_content_overflow(block: str, width_macro: str) -> str:  # NEW
+    """
+    Wraps the first raw-content environment in a figure/table block (a
+    tabular, or a tikzpicture) in \\resizebox, unless it's already wrapped
+    in resizebox/adjustbox. This is what actually catches figures made of
+    plain TikZ nodes/arrows with hardcoded absolute widths — those have no
+    \\includegraphics and no tabular, so they'd otherwise pass through the
+    migration completely unscaled and keep overflowing the narrower target
+    column.
+    """
+    if _ALREADY_WRAPPED_RE.search(block):
+        return block  # author already handled scaling, don't double-wrap
+
+    m = _CONTENT_ENV_RE.search(block)
+    if not m:
+        return block
+
+    env_name = m.group(1)
+    begin = m.start()
+    end_marker = f"\\end{{{env_name}}}"
+    end_idx = block.find(end_marker, begin)
+    if end_idx == -1:
+        return block  # unbalanced — best effort, leave as-is
+    end_idx += len(end_marker)
+
+    content = block[begin:end_idx]
+    wrapped = f"\\resizebox{{{width_macro}}}{{!}}{{%\n{content}}}"
+    return block[:begin] + wrapped + block[end_idx:]
+
+
+def _fix_body_overflow(body: str) -> str:  # NEW
+    """
+    Rewrites figure/table environments so their contents scale to the
+    target template's column width instead of keeping the source
+    template's (often wider) sizing, which otherwise overflows into the
+    margin/gutter after a single->two-column style migration.
+
+    - Plain figure/table -> width rewritten to \\columnwidth.
+    - figure*/table* (already spanning) -> width rewritten to \\textwidth.
+    - includegraphics widths already relative to \\columnwidth/\\linewidth/
+      \\textwidth are left untouched.
+    - Bare tabular or tikzpicture content with no existing resizebox/
+      adjustbox gets wrapped in \\resizebox{<width_macro>}{!}{...}. This is
+      what catches figures built directly out of raw TikZ (nodes, arrows,
+      boxes) with hardcoded absolute widths — there's no includegraphics
+      or tabular to key off of otherwise, so without this they pass
+      through untouched and keep overflowing.
+    """
+
+    def _fix_block(m: re.Match) -> str:
+        env_name = m.group(1)
+        block = m.group(0)
+        width_macro = _target_width_macro(env_name)
+        block = _fix_includegraphics_widths(block, width_macro)
+        block = _fix_content_overflow(block, width_macro)
+        return block
+
+    return _ENV_BLOCK_RE.sub(_fix_block, body)
+
+
 def migrate_files_to_template(
     files: list[dict],  # [{"name", "language", "content"}, ...]
     target_template: str,
@@ -4691,7 +4785,9 @@ def migrate_files_to_template(
     Rebuild each .tex file for the target template: swap \\documentclass and
     the template's own style package, but keep the author's actual title,
     author block, extra \\usepackage lines, custom macros, and full body
-    content intact. Non-.tex files (bib, etc.) pass through unchanged.
+    content intact (with figure/table widths rescaled to the target
+    template's column width to avoid overflow). Non-.tex files (bib, etc.)
+    pass through unchanged.
     """
     starters = {
         name: content for name, _lang, content in get_template_files(target_template)
@@ -4715,7 +4811,7 @@ def migrate_files_to_template(
             if extra_tikzlib:
                 new_preamble = new_preamble.rstrip("\n") + "\n" + extra_tikzlib + "\n"
 
-            # NEW — carry over custom \newcommand/\renewcommand macros the body needs
+            # Carry over custom \newcommand/\renewcommand macros the body needs
             extra_macros = _extra_newcommand_lines(source_preamble, target_preamble)
             if extra_macros:
                 new_preamble = (
@@ -4734,6 +4830,7 @@ def migrate_files_to_template(
             new_preamble += _COMPAT_SHIM
 
             body = _extract_body(f["content"])
+            body = _fix_body_overflow(body)  # NEW — rescale figure/table widths
             migrated.append(
                 {
                     **f,
