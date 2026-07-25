@@ -81,6 +81,8 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    volumes:
+      - frontend_static:/shared/static
     networks:
       - internal
       - web
@@ -88,6 +90,8 @@ services:
 volumes:
   postgres_data:
   compiled_pdfs:
+  frontend_static:
+    name: texademia_frontend_static
 
 networks:
   internal:
