@@ -3,8 +3,11 @@
 frontend/src/routes
 ├── __root.tsx
 ├── index.tsx
+├── login.tsx
+├── profile.tsx
 ├── redaction.$documentId.tsx
-└── redaction.index.tsx
+├── redaction.index.tsx
+└── register.tsx
 
 ```
 
@@ -99,20 +102,49 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 ## index.tsx
 
 ```tsx
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { ApiError } from "#/shared/api/client";
+import { currentUserQueryOptions } from "#/features/auth";
+import { getCookieHeader } from "#/shared/api/serverCookie";
 
-export const Route = createFileRoute('/')({ component: Home })
+export const Route = createFileRoute("/")({
+  beforeLoad: async ({ context: { queryClient } }) => {
+    try {
+      await queryClient.ensureQueryData(currentUserQueryOptions(getCookieHeader()));
+      throw redirect({ to: "/redaction" });
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        throw redirect({ to: "/login" });
+      }
+      throw err; // real errors (network, 500...) and the redirect() above both fall through here
+    }
+  },
+});
 
-function Home() {
-  return (
-    <div className="p-8">
-      <h1 className="text-4xl font-bold">Welcome to TanStack Start</h1>
-      <p className="mt-4 text-lg">
-        Edit <code>src/routes/index.tsx</code> to get started.
-      </p>
-    </div>
-  )
-}
+```
+
+
+## login.tsx
+
+```tsx
+import { createFileRoute } from "@tanstack/react-router";
+import { LoginForm } from "#/features/auth";
+
+export const Route = createFileRoute("/login")({ component: LoginForm });
+
+```
+
+
+## profile.tsx
+
+```tsx
+import { createFileRoute } from "@tanstack/react-router";
+import { ProfileForm, requireAuth } from "#/features/auth";
+
+export const Route = createFileRoute("/profile")({
+  beforeLoad: ({ context: { queryClient } }) => requireAuth(queryClient),
+  component: ProfileForm,
+});
 
 ```
 
@@ -123,10 +155,13 @@ function Home() {
 import { createFileRoute } from "@tanstack/react-router";
 import { documentQueryOptions } from "#/features/redaction";
 import { RedactionPage } from "#/features/redaction";
+import { requireAuth } from "#/features/auth";
+import { getCookieHeader } from "#/shared/api/serverCookie";
 
 export const Route = createFileRoute("/redaction/$documentId")({
+  beforeLoad: ({ context: { queryClient } }) => requireAuth(queryClient),
   loader: ({ context: { queryClient }, params: { documentId } }) =>
-    queryClient.ensureQueryData(documentQueryOptions(documentId)),
+    queryClient.ensureQueryData(documentQueryOptions(documentId, getCookieHeader())),
   component: () => {
     const { documentId } = Route.useParams();
     return <RedactionPage key={documentId} documentId={documentId} />;
@@ -141,12 +176,26 @@ export const Route = createFileRoute("/redaction/$documentId")({
 ```tsx
 import { createFileRoute } from "@tanstack/react-router";
 import { documentsQueryOptions, DocumentsListPage } from "#/features/redaction";
+import { requireAuth } from "#/features/auth";
+import { getCookieHeader } from "#/shared/api/serverCookie";
 
 export const Route = createFileRoute("/redaction/")({
+  beforeLoad: ({ context: { queryClient } }) => requireAuth(queryClient),
   loader: ({ context: { queryClient } }) =>
-    queryClient.ensureQueryData(documentsQueryOptions()),
+      queryClient.ensureQueryData(documentsQueryOptions(getCookieHeader())),
   component: DocumentsListPage,
 });
+
+```
+
+
+## register.tsx
+
+```tsx
+import { createFileRoute } from "@tanstack/react-router";
+import { RegisterForm } from "#/features/auth";
+
+export const Route = createFileRoute("/register")({ component: RegisterForm });
 
 ```
 

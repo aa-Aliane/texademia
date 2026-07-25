@@ -5,6 +5,7 @@ backend
 ├── .env.example
 ├── backend.md
 ├── Dockerfile
+├── Dockerfile.prod
 ├── requirements.txt
 └── src
     ├── __init__.py
@@ -152,6 +153,40 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+```
+
+
+## Dockerfile.prod
+
+```prod
+FROM python:3.11-slim AS base
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libpq-dev \
+    texlive-latex-base \
+    texlive-latex-recommended \
+    texlive-latex-extra \
+    texlive-fonts-recommended \
+    texlive-fonts-extra \
+    texlive-publishers \
+    texlive-science \
+    texlive-pictures \
+    texlive-bibtex-extra \
+    biber \
+    latexmk \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE 8000
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
 
 ```
 
@@ -807,7 +842,7 @@ async def get_dev_user(session: AsyncSession = Depends(get_db)) -> User:
 ```py
 import uuid
 from typing import Optional
-
+import os
 from fastapi import Depends, Request
 from fastapi_users import BaseUserManager, UUIDIDMixin
 from fastapi_users.authentication import (
@@ -855,13 +890,13 @@ async def get_user_manager(user_db=Depends(get_user_db)):
 
 
 # ... (rest of your existing authentication code remains the same)
-
+print("hhhh")
 
 cookie_transport = CookieTransport(
     cookie_name="auth_token",
     cookie_max_age=3600,
     cookie_samesite="lax",
-    cookie_secure=False,
+    cookie_secure=os.getenv("ENVIRONMENT") == "production",
     cookie_path="/",
 )
 
@@ -3674,14 +3709,16 @@ __all__ = ["profile_router", "documents_router", "compile_router"]
 ## src/features/texademia/routers/compile.py
 
 ```py
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from src.features.auth.models import User
 from src.features.texademia.services.compiler import get_job_status
+from src.features.auth.router import current_active_user
 
 router = APIRouter(prefix="/compile", tags=["compile"])
 
 
 @router.get("/{job_id}")
-async def poll_compile_status(job_id: str):
+async def poll_compile_status(job_id: str, user: User = Depends(current_active_user)):
     return get_job_status(job_id)
 
 ```
@@ -3704,7 +3741,7 @@ from datetime import datetime
 
 from src.database.session import get_db
 from src.features.auth.models import User
-from src.features.auth.dev_user import get_dev_user
+from src.features.auth.router import current_active_user
 from src.features.texademia.models.document import Document, DocumentFile
 from src.features.texademia.schemas.document import (
     DocumentCreate,
@@ -3780,7 +3817,7 @@ async def _get_owned_file(
 @router.get("", response_model=List[DocumentRead])
 async def list_documents(
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(get_dev_user),
+    user: User = Depends(current_active_user),
 ):
     statement = select(Document).where(Document.user_id == user.id)
     result = await session.exec(statement)
@@ -3791,7 +3828,7 @@ async def list_documents(
 async def create_document(
     doc_in: DocumentCreate,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(get_dev_user),
+    user: User = Depends(current_active_user),
 ):
     document = Document(title=doc_in.title, template=doc_in.template, user_id=user.id)
     session.add(document)
@@ -3813,7 +3850,7 @@ async def create_document(
 async def get_document(
     document_id: uuid.UUID,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(get_dev_user),
+    user: User = Depends(current_active_user),
 ):
     return await _get_owned_document(document_id, session, user)
 
@@ -3823,7 +3860,7 @@ async def update_document(
     document_id: uuid.UUID,
     doc_in: DocumentUpdate,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(get_dev_user),
+    user: User = Depends(current_active_user),
 ):
     document = await _get_owned_document(document_id, session, user)
 
@@ -3842,7 +3879,7 @@ async def update_document(
 async def delete_document(
     document_id: uuid.UUID,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(get_dev_user),
+    user: User = Depends(current_active_user),
 ):
     document = await _get_owned_document(document_id, session, user)
     await session.delete(document)
@@ -3855,7 +3892,7 @@ async def update_file(
     file_id: uuid.UUID,
     file_in: FileUpdate,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(get_dev_user),
+    user: User = Depends(current_active_user),
 ):
     file = await _get_owned_file(document_id, file_id, session, user)
     file.line_authors = _update_line_authors(
@@ -3873,7 +3910,7 @@ async def update_file(
 async def compile_document(
     document_id: uuid.UUID,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(get_dev_user),
+    user: User = Depends(current_active_user),
 ):
     document = await _get_owned_document(document_id, session, user)
 
@@ -3894,7 +3931,7 @@ async def duplicate_document(
     document_id: uuid.UUID,
     payload: DocumentDuplicate,
     session: AsyncSession = Depends(get_db),
-    user: User = Depends(get_dev_user),
+    user: User = Depends(current_active_user),
 ):
     source = await _get_owned_document(document_id, session, user)
     target_template = payload.template or source.template

@@ -1,6 +1,23 @@
 # Tree View:
 ```
 frontend/src/features
+├── auth
+│   ├── api
+│   │   └── auth.ts
+│   ├── components
+│   │   ├── loginForm.tsx
+│   │   ├── profileForm.tsx
+│   │   ├── registerForm.tsx
+│   │   └── userMenu.tsx
+│   ├── guards
+│   │   └── requireAuth.ts
+│   ├── hooks
+│   │   └── useAuth.ts
+│   ├── index.ts
+│   ├── schemas
+│   │   └── auth.ts
+│   └── types
+│       └── auth.ts
 └── redaction
     ├── api
     │   └── redaction.ts
@@ -30,6 +47,417 @@ frontend/src/features
 ```
 
 # Content:
+
+## auth/api/auth.ts
+
+```ts
+import { queryOptions } from "@tanstack/react-query";
+import { api } from "#/shared/api/client";
+import type { User } from "../types/auth";
+
+interface UserDto {
+  id: string;
+  email: string;
+  is_active: boolean;
+  is_superuser: boolean;
+  is_verified: boolean;
+  first_name?: string | null;
+  last_name?: string | null;
+}
+
+function mapUser(data: UserDto): User {
+  return {
+    id: data.id,
+    email: data.email,
+    isActive: data.is_active,
+    isSuperuser: data.is_superuser,
+    isVerified: data.is_verified,
+    firstName: data.first_name ?? null,
+    lastName: data.last_name ?? null,
+  };
+}
+
+export async function updateCurrentUser(updates: { firstName?: string; lastName?: string }): Promise<User> {
+  const data = await api.patch<UserDto>("/api/auth/users/me", {
+    first_name: updates.firstName,
+    last_name: updates.lastName,
+  });
+  return mapUser(data);
+}
+
+export async function getCurrentUser(cookieHeader?: string | null): Promise<User> {
+  const data = await api.get<UserDto>("/api/auth/users/me", { cookieHeader });
+  return mapUser(data);
+}
+
+export const currentUserQueryOptions = (cookieHeader?: string | null) =>
+  queryOptions({
+    queryKey: ["current-user"],
+    queryFn: () => getCurrentUser(cookieHeader),
+    retry: false,
+  });
+
+// fastapi-users' /jwt/login is OAuth2PasswordRequestForm: it needs
+// application/x-www-form-urlencoded with `username`/`password`, not JSON —
+// so it can't go through the shared `api` client, which always sends JSON.
+export async function login(email: string, password: string): Promise<void> {
+  const body = new URLSearchParams();
+  body.set("username", email);
+  body.set("password", password);
+
+  const baseUrl = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+  const res = await fetch(`${baseUrl}/api/auth/jwt/login`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+
+  if (!res.ok) {
+    let detail = "Login failed";
+    try {
+      const data = await res.json();
+      detail = data?.detail ?? detail;
+    } catch {
+      // ignore non-JSON error body
+    }
+    throw new Error(detail === "LOGIN_BAD_CREDENTIALS" ? "Invalid email or password" : detail);
+  }
+}
+
+export async function logout(): Promise<void> {
+  await api.post("/api/auth/jwt/logout");
+}
+
+export async function register(email: string, password: string): Promise<void> {
+  await api.post("/api/auth/register", { email, password });
+}
+
+```
+
+
+## auth/components/loginForm.tsx
+
+```tsx
+import { TextInput, PasswordInput, Button, Stack, Alert, Title, Text, Anchor } from "@mantine/core";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useLogin } from "../hooks/useAuth";
+import { loginSchema, type LoginInput } from "../schemas/auth";
+
+export function LoginForm() {
+  const navigate = useNavigate();
+  const { mutate, isPending, error } = useLogin();
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginInput>({ resolver: zodResolver(loginSchema) });
+
+  const onSubmit = (values: LoginInput) => {
+    mutate(values, { onSuccess: () => navigate({ to: "/redaction" }) });
+  };
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)}>
+      <Stack maw={360} mx="auto" mt={80}>
+        <Title order={2}>Sign in</Title>
+        {error && <Alert color="red">{(error as Error).message}</Alert>}
+        <TextInput label="Email" type="email" error={errors.email?.message} {...register("email")} />
+        <PasswordInput label="Password" error={errors.password?.message} {...register("password")} />
+        <Button type="submit" loading={isPending}>Sign in</Button>
+        <Text size="sm">No account? <Anchor component={Link} to="/register">Register</Anchor></Text>
+      </Stack>
+    </form>
+  );
+}
+
+```
+
+
+## auth/components/profileForm.tsx
+
+```tsx
+import { TextInput, Button, Stack, Alert, Title } from "@mantine/core";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useCurrentUser, useUpdateProfile } from "../hooks/useAuth";
+import { profileSchema, type ProfileInput } from "../schemas/auth";
+
+export function ProfileForm() {
+  const { data: user } = useCurrentUser();
+  const { mutate, isPending, error, isSuccess } = useUpdateProfile();
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<ProfileInput>({
+    resolver: zodResolver(profileSchema),
+    // resyncs whenever `user` changes — no useEffect needed
+    values: user ? { firstName: user.firstName ?? "", lastName: user.lastName ?? "" } : undefined,
+  });
+
+  if (!user) return null;
+
+  const onSubmit = (values: ProfileInput) => {
+    mutate({ firstName: values.firstName || undefined, lastName: values.lastName || undefined });
+  };
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)}>
+      <Stack maw={420} mx="auto" mt={80}>
+        <Title order={2}>Your profile</Title>
+        {error && <Alert color="red">{(error as Error).message}</Alert>}
+        {isSuccess && <Alert color="green">Profile updated</Alert>}
+        <TextInput label="Email" value={user.email} disabled />
+        <TextInput label="First name" error={errors.firstName?.message} {...register("firstName")} />
+        <TextInput label="Last name" error={errors.lastName?.message} {...register("lastName")} />
+        <Button type="submit" loading={isPending}>Save changes</Button>
+      </Stack>
+    </form>
+  );
+}
+
+```
+
+
+## auth/components/registerForm.tsx
+
+```tsx
+import { TextInput, PasswordInput, Button, Stack, Alert, Title, Text, Anchor } from "@mantine/core";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useRegister, useLogin } from "../hooks/useAuth";
+import { registerSchema, type RegisterInput } from "../schemas/auth";
+
+export function RegisterForm() {
+  const navigate = useNavigate();
+  const registerMutation = useRegister();
+  const loginMutation = useLogin();
+  const {
+    register: registerField,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<RegisterInput>({ resolver: zodResolver(registerSchema) });
+
+  const onSubmit = (values: RegisterInput) => {
+    registerMutation.mutate(values, {
+      // /register doesn't set the auth cookie — log in right after
+      onSuccess: () =>
+        loginMutation.mutate(values, { onSuccess: () => navigate({ to: "/redaction" }) }),
+    });
+  };
+
+  const error = registerMutation.error ?? loginMutation.error;
+  const isPending = registerMutation.isPending || loginMutation.isPending;
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)}>
+      <Stack maw={360} mx="auto" mt={80}>
+        <Title order={2}>Create account</Title>
+        {error && <Alert color="red">{(error as Error).message}</Alert>}
+        <TextInput label="Email" type="email" error={errors.email?.message} {...registerField("email")} />
+        <PasswordInput label="Password" error={errors.password?.message} {...registerField("password")} />
+        <Button type="submit" loading={isPending}>Create account</Button>
+        <Text size="sm">Already have an account? <Anchor component={Link} to="/login">Sign in</Anchor></Text>
+      </Stack>
+    </form>
+  );
+}
+
+```
+
+
+## auth/components/userMenu.tsx
+
+```tsx
+import { Menu, Avatar, UnstyledButton, Group, Text, Skeleton } from "@mantine/core";
+import { IconUser, IconLogout, IconChevronDown } from "@tabler/icons-react";
+import { Link } from "@tanstack/react-router";
+import { useCurrentUser, useLogout } from "../hooks/useAuth";
+
+function initials(email: string) {
+  return email.slice(0, 2).toUpperCase();
+}
+
+export function UserMenu() {
+  const { data: user, isLoading } = useCurrentUser();
+  const { mutate: logout, isPending } = useLogout();
+
+
+  if (isLoading) return <Skeleton height={36} width={140} radius="sm" />;
+  if (!user) return null;
+
+  const displayName =
+    user.firstName || user.lastName ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() : user.email;
+
+  return (
+    <Menu position="bottom-end" withArrow shadow="md">
+      <Menu.Target>
+        <UnstyledButton>
+          <Group gap={8}>
+            <Avatar radius="xl" size={32} color="blue">{initials(user.email)}</Avatar>
+            <Text size="sm" fw={500} visibleFrom="sm">{displayName}</Text>
+            <IconChevronDown size={14} />
+          </Group>
+        </UnstyledButton>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Label>{user.email}</Menu.Label>
+        <Menu.Item component={Link} to="/profile" leftSection={<IconUser size={16} />}>
+          Edit profile
+        </Menu.Item>
+        <Menu.Divider />
+        <Menu.Item color="red" leftSection={<IconLogout size={16} />} onClick={() => logout()} disabled={isPending}>
+          Log out
+        </Menu.Item>
+      </Menu.Dropdown>
+    </Menu>
+  );
+}
+
+```
+
+
+## auth/guards/requireAuth.ts
+
+```ts
+import { redirect } from "@tanstack/react-router";
+import type { QueryClient } from "@tanstack/react-query";
+import { ApiError } from "#/shared/api/client";
+import { getCookieHeader } from "#/shared/api/serverCookie";
+import { currentUserQueryOptions } from "../api/auth";
+
+export async function requireAuth(queryClient: QueryClient) {
+  try {
+    return await queryClient.ensureQueryData(currentUserQueryOptions(getCookieHeader()));
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) {
+      throw redirect({ to: "/login" });
+    }
+    throw err;
+  }
+}
+
+```
+
+
+## auth/hooks/useAuth.ts
+
+```ts
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "@tanstack/react-router";
+import { currentUserQueryOptions, login, logout, register, updateCurrentUser } from "../api/auth";
+
+export function useCurrentUser() {
+  return useQuery(currentUserQueryOptions());
+}
+
+export function useUpdateProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: updateCurrentUser,
+    onSuccess: (user) => queryClient.setQueryData(["current-user"], user),
+  });
+}
+
+export function useLogin() {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  return useMutation({
+    mutationFn: ({ email, password }: { email: string; password: string }) => login(email, password),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["current-user"] });
+      await router.invalidate();
+    },
+  });
+}
+
+export function useRegister() {
+  return useMutation({
+    mutationFn: ({ email, password }: { email: string; password: string }) => register(email, password),
+  });
+}
+
+export function useLogout() {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  return useMutation({
+    mutationFn: logout,
+    onSuccess: async () => {
+      queryClient.clear(); // wipe cached documents/profile etc. that belonged to this user
+      await router.invalidate();
+      router.navigate({ to: "/login" });
+    },
+  });
+}
+
+```
+
+
+## auth/index.ts
+
+```ts
+export { LoginForm } from "./components/loginForm";
+export { RegisterForm } from "./components/registerForm";
+export { useCurrentUser, useLogin, useRegister, useLogout } from "./hooks/useAuth";
+export { currentUserQueryOptions, getCurrentUser } from "./api/auth";
+export { requireAuth } from "./guards/requireAuth";
+export type { User } from "./types/auth";
+export { UserMenu } from "./components/userMenu";
+export { ProfileForm } from "./components/profileForm";
+export { useUpdateProfile } from "./hooks/useAuth";
+
+```
+
+
+## auth/schemas/auth.ts
+
+```ts
+import { z } from "zod";
+
+// login schema
+export const loginSchema = z.object({
+  email: z.string().email("Enter a valid email"),
+  password: z.string().min(1, "Password is required"),
+});
+export type LoginInput = z.infer<typeof loginSchema>;
+
+// register schema
+export const registerSchema = z.object({
+  email: z.string().email("Enter a valid email"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+});
+export type RegisterInput = z.infer<typeof registerSchema>;
+
+// profile schema
+export const profileSchema = z.object({
+  firstName: z.string().max(100).optional().or(z.literal("")),
+  lastName: z.string().max(100).optional().or(z.literal("")),
+});
+export type ProfileInput = z.infer<typeof profileSchema>;
+
+```
+
+
+## auth/types/auth.ts
+
+```ts
+export interface User {
+  id: string;
+  email: string;
+  isActive: boolean;
+  isSuperuser: boolean;
+  isVerified: boolean;
+  firstName?: string | null;
+  lastName?: string | null;
+}
+
+```
+
 
 ## redaction/api/redaction.ts
 
