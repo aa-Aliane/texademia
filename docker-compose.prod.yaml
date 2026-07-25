@@ -83,6 +83,7 @@ services:
         condition: service_healthy
     volumes:
       - frontend_static:/shared/static
+    command: sh -c "rm -rf /shared/static/* && cp -r /app/dist/client/. /shared/static/ && node server-entry.mjs"
     networks:
       - internal
       - web
