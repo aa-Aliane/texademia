@@ -35,10 +35,12 @@ import {
   IconPlus,
   IconSearch,
   IconTrash,
+  IconUsers,
 } from "@tabler/icons-react";
 import { createDocument, deleteDocument, documentsQueryOptions, duplicateDocument } from "../api/redaction";
 import { CreateDocumentDialog } from "./createDocumentDialog";
 import { DuplicateDocumentDialog } from "./duplicateDocumentDialog";
+import { CollaboratorsDialog } from "./collaboratorsDialog"; // NEW
 import type { RedactionDocument } from "../types/redaction";
 import classes from "./documentsListPage.module.css";
 
@@ -65,6 +67,7 @@ export function DocumentsListPage() {
   const [dialogOpened, setDialogOpened] = useState(false);
   const [duplicateTarget, setDuplicateTarget] = useState<RedactionDocument | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<RedactionDocument | null>(null);
+  const [collaboratorsTarget, setCollaboratorsTarget] = useState<RedactionDocument | null>(null); // NEW
   const [globalFilter, setGlobalFilter] = useState("");
   const [sorting, setSorting] = useState<SortingState>([{ id: "updatedAt", desc: true }]);
 
@@ -157,6 +160,20 @@ export function DocumentsListPage() {
           return (
             <Box className={classes.actionsCell} h="100%" mih={40}>
               <div className={classes.overlay}>
+                {doc.role === "owner" && (
+                  <Tooltip label="Share">
+                    <ActionIcon
+                      variant="subtle"
+                      color="blue"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCollaboratorsTarget(doc);
+                      }}
+                    >
+                      <IconUsers size={16} />
+                    </ActionIcon>
+                  </Tooltip>
+                )}
                 <Tooltip label="Duplicate">
                   <ActionIcon
                     variant="subtle"
@@ -327,27 +344,33 @@ export function DocumentsListPage() {
         isCreating={isCreating}
       />
 
-      {duplicateTarget && (
-        <DuplicateDocumentDialog
-          opened={!!duplicateTarget}
-          onClose={() => setDuplicateTarget(null)}
-          onDuplicate={(opts) => duplicate(opts)}
-          isDuplicating={isDuplicating}
-          sourceTitle={duplicateTarget.title}
-          sourceTemplate={duplicateTarget.template}
-        />
-      )}
+      <DuplicateDocumentDialog
+        opened={!!duplicateTarget}
+        onClose={() => setDuplicateTarget(null)}
+        onDuplicate={(opts) => duplicate(opts)}
+        isDuplicating={isDuplicating}
+        sourceTitle={duplicateTarget?.title ?? ""}
+        sourceTemplate={duplicateTarget?.template ?? "default"}
+      />
+
+      {/* NEW */}
+      <CollaboratorsDialog
+        opened={!!collaboratorsTarget}
+        onClose={() => setCollaboratorsTarget(null)}
+        documentId={collaboratorsTarget?.id ?? ""}
+        collaborators={collaboratorsTarget?.collaborators ?? []}
+      />
 
       <Modal opened={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete document" centered>
-        <Stack gap="md">
+        <Stack>
           <Text size="sm">
-            Delete <b>{deleteTarget?.title}</b>? This can't be undone.
+            Are you sure you want to delete <strong>{deleteTarget?.title}</strong>? This can't be undone.
           </Text>
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setDeleteTarget(null)}>
               Cancel
             </Button>
-            <Button color="red" loading={isDeleting} onClick={() => remove(deleteTarget!.id)}>
+            <Button color="red" loading={isDeleting} onClick={() => deleteTarget && remove(deleteTarget.id)}>
               Delete
             </Button>
           </Group>

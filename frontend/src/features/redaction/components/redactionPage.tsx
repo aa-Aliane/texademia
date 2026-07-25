@@ -6,10 +6,11 @@ import { Editor } from "./editor";
 import { PdfPreview } from "./pdfPreview";
 import { FileTabs, PREVIEW_TAB_ID } from "./fileTabs";
 import { DocumentHeader } from "./documentHeader";
-import { DuplicateDocumentDialog } from "./duplicateDocumentDialog"; // NEW
+import { DuplicateDocumentDialog } from "./duplicateDocumentDialog";
+import { CollaboratorsDialog } from "./collaboratorsDialog"; // NEW
 import { useCompileDocument } from "../hooks/useCompileDocument";
 import { useUpdateDocumentTitle } from "../hooks/useUpdateDocumentTitle";
-import { documentQueryOptions, duplicateDocument } from "../api/redaction"; // CHANGED
+import { documentQueryOptions, duplicateDocument } from "../api/redaction";
 import type { ProjectFile } from "../types/redaction";
 
 interface RedactionPageProps {
@@ -18,13 +19,14 @@ interface RedactionPageProps {
 
 export function RedactionPage({ documentId }: RedactionPageProps) {
   const { data: document } = useQuery(documentQueryOptions(documentId));
-  const navigate = useNavigate(); // NEW
-  const queryClient = useQueryClient(); // NEW
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [activeFileId, setActiveFileId] = useState<string | null>(null);
   const [activeTabId, setActiveTabId] = useState<string>("");
-  const [duplicateDialogOpened, setDuplicateDialogOpened] = useState(false); // NEW
+  const [duplicateDialogOpened, setDuplicateDialogOpened] = useState(false);
+  const [collaboratorsDialogOpened, setCollaboratorsDialogOpened] = useState(false); // NEW
 
   const {
     compile,
@@ -39,7 +41,6 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
 
   const { mutate: saveTitle, isPending: isSavingTitle } = useUpdateDocumentTitle(documentId);
 
-  // NEW: duplicate mutation
   const { mutate: duplicate, isPending: isDuplicating } = useMutation({
     mutationFn: (opts: { template: string; title: string }) =>
       duplicateDocument(documentId, opts),
@@ -94,7 +95,9 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
         compileLog={compileLog}
         template={document.template}
         pdfUrl={pdfUrl}
-        onDuplicateClick={() => setDuplicateDialogOpened(true)} // NEW
+        onDuplicateClick={() => setDuplicateDialogOpened(true)}
+        onShareClick={() => setCollaboratorsDialogOpened(true)} // NEW
+        role={document.role}                                    // NEW
       />
 
       <FileTabs files={files} activeTabId={currentTabId} onSelect={handleSelectTab} />
@@ -112,7 +115,6 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
         ) : null}
       </div>
 
-      {/* NEW */}
       <DuplicateDocumentDialog
         opened={duplicateDialogOpened}
         onClose={() => setDuplicateDialogOpened(false)}
@@ -120,6 +122,14 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
         isDuplicating={isDuplicating}
         sourceTitle={document.title}
         sourceTemplate={document.template}
+      />
+
+      {/* NEW */}
+      <CollaboratorsDialog
+        opened={collaboratorsDialogOpened}
+        onClose={() => setCollaboratorsDialogOpened(false)}
+        documentId={documentId}
+        collaborators={document.collaborators}
       />
     </div>
   );

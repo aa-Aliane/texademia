@@ -13,13 +13,20 @@ from datetime import datetime
 from src.database.session import get_db
 from src.features.auth.models import User
 from src.features.auth.router import current_active_user
-from src.features.texademia.models.document import Document, DocumentFile
+from src.features.texademia.models.document import (
+    Document,
+    DocumentFile,
+    DocumentCollaborator,
+    CollaboratorStatus,
+    CollaboratorRole,
+)
 from src.features.texademia.schemas.document import (
     DocumentCreate,
     DocumentRead,
     DocumentUpdate,
     DocumentDuplicate,
     FileUpdate,
+    CollaboratorRead,
 )
 from src.features.texademia.templates import get_template_files
 from src.features.texademia.services.compiler import (
@@ -29,7 +36,7 @@ from src.features.texademia.services.compiler import (
 )
 from src.features.texademia.services.template_migrator import (
     migrate_files_to_template,
-)  # NEW
+)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -55,25 +62,57 @@ def _update_line_authors(
     return new_meta
 
 
-async def _get_owned_document(
-    document_id: uuid.UUID, session: AsyncSession, user: User
-) -> Document:
+async def _get_accessible_document(
+    document_id: uuid.UUID,
+    session: AsyncSession,
+    user: User,
+    require_write: bool = False,
+) -> tuple[Document, str]:
+    """
+    Replaces the old owner-only `_get_owned_document`. Returns the document
+    plus the caller's effective role ("owner" | "writer" | "reader") so
+    endpoints can both authorize and build the response without a second
+    lookup.
+    """
     statement = (
         select(Document)
-        .where(Document.id == document_id, Document.user_id == user.id)
-        .options(selectinload(Document.files))
+        .where(Document.id == document_id)
+        .options(
+            selectinload(Document.files),
+            selectinload(Document.collaborators).selectinload(DocumentCollaborator.user),
+        )
     )
     result = await session.exec(statement)
     document = result.first()
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
-    return document
+
+    if document.user_id == user.id:
+        return document, "owner"
+
+    collab = next(
+        (
+            c
+            for c in document.collaborators
+            if c.user_id == user.id and c.status == CollaboratorStatus.accepted
+        ),
+        None,
+    )
+    if not collab:
+        # Not the owner and no accepted collaborator row — treat as not found
+        # rather than 403, so we don't leak document existence.
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if require_write and collab.role != CollaboratorRole.writer:
+        raise HTTPException(status_code=403, detail="You only have read access to this document")
+
+    return document, collab.role.value
 
 
 async def _get_owned_file(
     document_id: uuid.UUID, file_id: uuid.UUID, session: AsyncSession, user: User
 ) -> DocumentFile:
-    await _get_owned_document(document_id, session, user)
+    await _get_accessible_document(document_id, session, user, require_write=True)
 
     statement = select(DocumentFile).where(
         DocumentFile.id == file_id, DocumentFile.document_id == document_id
@@ -85,14 +124,62 @@ async def _get_owned_file(
     return file
 
 
+def _role_for(document: Document, user: User) -> str:
+    collab = next((c for c in document.collaborators if c.user_id == user.id), None)
+    return collab.role.value if collab else "reader"
+
+
+def _to_document_read(document: Document, role: str) -> DocumentRead:
+    base = DocumentRead.model_validate(document)
+    collaborators = (
+        [
+            CollaboratorRead(
+                id=c.id,
+                user_id=c.user_id,
+                email=c.user.email,
+                role=c.role,
+                status=c.status,
+            )
+            for c in document.collaborators
+        ]
+        if role == "owner"
+        else []
+    )
+    return base.model_copy(update={"role": role, "collaborators": collaborators})
+
+
 @router.get("", response_model=List[DocumentRead])
 async def list_documents(
     session: AsyncSession = Depends(get_db),
     user: User = Depends(current_active_user),
 ):
-    statement = select(Document).where(Document.user_id == user.id)
-    result = await session.exec(statement)
-    return result.all()
+    owned_result = await session.exec(
+        select(Document)
+        .where(Document.user_id == user.id)
+        .options(
+            selectinload(Document.files),
+            selectinload(Document.collaborators).selectinload(DocumentCollaborator.user),
+        )
+    )
+    owned = list(owned_result.all())
+
+    shared_result = await session.exec(
+        select(Document)
+        .join(DocumentCollaborator, DocumentCollaborator.document_id == Document.id)
+        .where(
+            DocumentCollaborator.user_id == user.id,
+            DocumentCollaborator.status == CollaboratorStatus.accepted,
+        )
+        .options(
+            selectinload(Document.files),
+            selectinload(Document.collaborators).selectinload(DocumentCollaborator.user),
+        )
+    )
+    shared = list(shared_result.all())
+
+    return [_to_document_read(d, "owner") for d in owned] + [
+        _to_document_read(d, _role_for(d, user)) for d in shared
+    ]
 
 
 @router.post("", response_model=DocumentRead, status_code=status.HTTP_201_CREATED)
@@ -113,8 +200,8 @@ async def create_document(
         )
 
     await session.commit()
-    await session.refresh(document, attribute_names=["files"])
-    return document
+    await session.refresh(document, attribute_names=["files", "collaborators"])
+    return _to_document_read(document, "owner")
 
 
 @router.get("/{document_id}", response_model=DocumentRead)
@@ -123,7 +210,8 @@ async def get_document(
     session: AsyncSession = Depends(get_db),
     user: User = Depends(current_active_user),
 ):
-    return await _get_owned_document(document_id, session, user)
+    document, role = await _get_accessible_document(document_id, session, user)
+    return _to_document_read(document, role)
 
 
 @router.patch("/{document_id}", response_model=DocumentRead)
@@ -133,7 +221,7 @@ async def update_document(
     session: AsyncSession = Depends(get_db),
     user: User = Depends(current_active_user),
 ):
-    document = await _get_owned_document(document_id, session, user)
+    document, role = await _get_accessible_document(document_id, session, user, require_write=True)
 
     if doc_in.title is not None:
         document.title = doc_in.title
@@ -142,8 +230,8 @@ async def update_document(
 
     session.add(document)
     await session.commit()
-    await session.refresh(document, attribute_names=["files"])
-    return document
+    await session.refresh(document, attribute_names=["files", "collaborators"])
+    return _to_document_read(document, role)
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -152,7 +240,11 @@ async def delete_document(
     session: AsyncSession = Depends(get_db),
     user: User = Depends(current_active_user),
 ):
-    document = await _get_owned_document(document_id, session, user)
+    # Deletion stays owner-only — collaborators, even writers, can't delete
+    # the document out from under the owner.
+    document, role = await _get_accessible_document(document_id, session, user)
+    if role != "owner":
+        raise HTTPException(status_code=403, detail="Only the owner can delete this document")
     await session.delete(document)
     await session.commit()
 
@@ -173,8 +265,8 @@ async def update_file(
     session.add(file)
     await session.commit()
 
-    document = await _get_owned_document(document_id, session, user)
-    return document
+    document, role = await _get_accessible_document(document_id, session, user)
+    return _to_document_read(document, role)
 
 
 @router.post("/{document_id}/compile", status_code=status.HTTP_202_ACCEPTED)
@@ -183,7 +275,7 @@ async def compile_document(
     session: AsyncSession = Depends(get_db),
     user: User = Depends(current_active_user),
 ):
-    document = await _get_owned_document(document_id, session, user)
+    document, _role = await _get_accessible_document(document_id, session, user, require_write=True)
 
     try:
         job_id = enqueue_compile_job(document.id, document.files, document.template)
@@ -204,7 +296,10 @@ async def duplicate_document(
     session: AsyncSession = Depends(get_db),
     user: User = Depends(current_active_user),
 ):
-    source = await _get_owned_document(document_id, session, user)
+    # Duplicating creates a brand new document owned by the caller — a
+    # reader/writer collaborator can do this too, they just end up owning
+    # the copy (not the original).
+    source, _role = await _get_accessible_document(document_id, session, user)
     target_template = payload.template or source.template
 
     new_document = Document(
@@ -220,7 +315,7 @@ async def duplicate_document(
         for f in source.files
     ]
     if target_template != source.template:
-        source_files = migrate_files_to_template(source_files, target_template)  # NEW
+        source_files = migrate_files_to_template(source_files, target_template)
 
     for f in source_files:
         session.add(
@@ -234,5 +329,5 @@ async def duplicate_document(
         )
 
     await session.commit()
-    await session.refresh(new_document, attribute_names=["files"])
-    return new_document
+    await session.refresh(new_document, attribute_names=["files", "collaborators"])
+    return _to_document_read(new_document, "owner")

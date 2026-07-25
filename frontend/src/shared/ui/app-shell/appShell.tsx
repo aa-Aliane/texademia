@@ -1,6 +1,7 @@
 import { AppShell as MantineAppShell, Text } from "@mantine/core";
 import { Link } from "@tanstack/react-router";
 import { UserMenu } from "#/features/auth";
+import { InvitationsBell } from "#/features/redaction"; // NEW
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -48,6 +49,7 @@ export function AppShell({ children }: AppShellProps) {
             }}
           >
             <div id="app-shell-header-actions" />
+            <InvitationsBell />
             <UserMenu />
           </div>
         </div>

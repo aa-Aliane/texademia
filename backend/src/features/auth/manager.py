@@ -47,9 +47,6 @@ async def get_user_manager(user_db=Depends(get_user_db)):
     yield UserManager(user_db)
 
 
-# ... (rest of your existing authentication code remains the same)
-print("hhhh")
-
 cookie_transport = CookieTransport(
     cookie_name="auth_token",
     cookie_max_age=3600,

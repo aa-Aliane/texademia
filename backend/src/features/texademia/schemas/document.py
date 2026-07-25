@@ -2,6 +2,40 @@ import uuid
 from datetime import datetime
 
 from pydantic import BaseModel
+from enum import Enum
+from pydantic import EmailStr
+
+
+class CollaboratorRole(str, Enum):
+    reader = "reader"
+    writer = "writer"
+
+
+class CollaboratorInvite(BaseModel):
+    email: EmailStr
+    role: CollaboratorRole = CollaboratorRole.reader
+
+
+class CollaboratorRoleUpdate(BaseModel):
+    role: CollaboratorRole
+
+
+class CollaboratorRead(BaseModel):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    email: str
+    role: CollaboratorRole
+    status: str
+
+    model_config = {"from_attributes": True}
+
+
+class InvitationRead(BaseModel):
+    id: uuid.UUID  # collaborator row id
+    document_id: uuid.UUID
+    document_title: str
+    role: CollaboratorRole
+    invited_by_email: str
 
 
 class LineAuthor(BaseModel):
@@ -32,7 +66,9 @@ class DocumentRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     files: list[FileRead] = []
-    pdf_url: str | None = None  # NEW
+    pdf_url: str | None = None
+    role: str = "owner"  #  "owner" | "writer" | "reader"
+    collaborators: list[CollaboratorRead] = []
 
     model_config = {"from_attributes": True}
 

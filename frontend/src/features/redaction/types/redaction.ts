@@ -31,3 +31,33 @@ export interface CompileError {
   message: string;
   log?: string;
 }
+
+export type CollaboratorRole = "reader" | "writer";
+
+export interface Collaborator {
+  id: string;
+  userId: string;
+  email: string;
+  role: CollaboratorRole;
+  status: "pending" | "accepted";
+}
+
+export interface RedactionDocument {
+  id: string;
+  title: string;
+  template: string;
+  files: ProjectFile[];
+  pdfUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+  role: "owner" | CollaboratorRole;
+  collaborators: Collaborator[];
+}
+
+export interface Invitation {
+  id: string;
+  documentId: string;
+  documentTitle: string;
+  role: CollaboratorRole;
+  invitedByEmail: string;
+}

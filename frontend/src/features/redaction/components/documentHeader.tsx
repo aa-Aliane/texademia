@@ -29,7 +29,9 @@ interface DocumentHeaderProps {
   compileLog: string | null;
   template: string;
   pdfUrl: string | null;
-  onDuplicateClick: () => void; // NEW
+  onDuplicateClick: () => void;
+  onShareClick: () => void; // NEW
+  role: string;             // NEW
 }
 
 function EditableTitle({
@@ -181,10 +183,12 @@ export function DocumentHeader({
   compileLog,
   template,
   pdfUrl,
-  onDuplicateClick, // NEW
+  onDuplicateClick,
+  onShareClick, // NEW
+  role,         // NEW
 }: DocumentHeaderProps) {
   const isCompiling = compilePhase === "saving" || compilePhase === "queued" || compilePhase === "running";
-  const hasCompiledBefore = compilePhase === "done" || !!pdfUrl; // NEW
+  const hasCompiledBefore = compilePhase === "done" || !!pdfUrl;
 
   return (
     <>
@@ -206,7 +210,13 @@ export function DocumentHeader({
             error={compileError}
             log={compileLog}
           />
-          <DocumentMenu template={template} pdfUrl={pdfUrl} onDuplicateClick={onDuplicateClick} />
+          <DocumentMenu
+            template={template}
+            pdfUrl={pdfUrl}
+            onDuplicateClick={onDuplicateClick}
+            onShareClick={onShareClick}
+            role={role}
+          />
           <CompileButton onCompile={onCompile} isCompiling={isCompiling} hasCompiledBefore={hasCompiledBefore} />
         </Group>
       </AppShellHeaderPortal>

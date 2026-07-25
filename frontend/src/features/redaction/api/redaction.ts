@@ -1,7 +1,7 @@
 // redaction/api/redaction.ts
 import { queryOptions } from "@tanstack/react-query";
 import { api, toPublicUrl } from "#/shared/api/client";
-import type { ProjectFile, RedactionDocument } from "../types/redaction";
+import type { ProjectFile, RedactionDocument, Collaborator, CollaboratorRole, Invitation } from "../types/redaction";
 
 interface FileDto {
   id: string;
@@ -11,14 +11,24 @@ interface FileDto {
   line_authors?: { author: string; edited_at: string }[] | null;
 }
 
+interface CollaboratorDto {
+  id: string;
+  user_id: string;
+  email: string;
+  role: CollaboratorRole;
+  status: "pending" | "accepted";
+}
+
 interface DocumentDto {
   id: string;
   title: string;
   template: string;
   files: FileDto[];
   pdf_url: string | null;
-  created_at: string; // NEW
-  updated_at: string; // NEW
+  created_at: string;
+  updated_at: string;
+  role: string; // NEW — "owner" | "writer" | "reader"
+  collaborators: CollaboratorDto[]; // NEW
 }
 
 function mapDocument(data: DocumentDto): RedactionDocument {
@@ -27,8 +37,16 @@ function mapDocument(data: DocumentDto): RedactionDocument {
     title: data.title,
     template: data.template,
     pdfUrl: data.pdf_url ? toPublicUrl(data.pdf_url) : null,
-    createdAt: data.created_at, // NEW
-    updatedAt: data.updated_at, // NEW
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+    role: data.role, // NEW
+    collaborators: (data.collaborators ?? []).map((c) => ({ // NEW
+      id: c.id,
+      userId: c.user_id,
+      email: c.email,
+      role: c.role,
+      status: c.status,
+    })),
     files: data.files.map((f) => ({
       id: f.id,
       name: f.name,
@@ -77,7 +95,6 @@ export async function duplicateDocument(
   return mapDocument(data);
 }
 
-// NEW: real delete, backed by the existing DELETE /documents/{id} endpoint
 export async function deleteDocument(documentId: string): Promise<void> {
   await api.delete(`/api/texademia/documents/${documentId}`);
 }
@@ -107,10 +124,8 @@ export async function startCompileJob(
   documentId: string,
   files: ProjectFile[]
 ): Promise<CompileJobResponse> {
-  // First: save all files
   await Promise.all(files.map((f) => saveFile(documentId, f.id, f.content)));
 
-  // Then: enqueue compilation job
   const data = await api.post<{ job_id: string; status: string }>(
     `/api/texademia/documents/${documentId}/compile`
   );
@@ -143,3 +158,66 @@ export const documentsQueryOptions = (cookieHeader?: string | null) =>
     queryKey: ["documents"],
     queryFn: () => listDocuments(cookieHeader),
   });
+
+// ============================================
+// Collaborators & invitations — NEW
+// ============================================
+
+export async function inviteCollaborator(
+  documentId: string,
+  email: string,
+  role: CollaboratorRole
+): Promise<Collaborator> {
+  const data = await api.post<CollaboratorDto>(`/api/texademia/documents/${documentId}/collaborators`, {
+    email,
+    role,
+  });
+  return { id: data.id, userId: data.user_id, email: data.email, role: data.role, status: data.status };
+}
+
+export async function updateCollaboratorRole(
+  documentId: string,
+  collaboratorId: string,
+  role: CollaboratorRole
+): Promise<Collaborator> {
+  const data = await api.patch<CollaboratorDto>(
+    `/api/texademia/documents/${documentId}/collaborators/${collaboratorId}`,
+    { role }
+  );
+  return { id: data.id, userId: data.user_id, email: data.email, role: data.role, status: data.status };
+}
+
+export async function removeCollaborator(documentId: string, collaboratorId: string): Promise<void> {
+  await api.delete(`/api/texademia/documents/${documentId}/collaborators/${collaboratorId}`);
+}
+
+interface InvitationDto {
+  id: string;
+  document_id: string;
+  document_title: string;
+  role: CollaboratorRole;
+  invited_by_email: string;
+}
+
+function mapInvitation(data: InvitationDto): Invitation {
+  return {
+    id: data.id,
+    documentId: data.document_id,
+    documentTitle: data.document_title,
+    role: data.role,
+    invitedByEmail: data.invited_by_email,
+  };
+}
+
+export async function getPendingInvitations(): Promise<Invitation[]> {
+  const data = await api.get<InvitationDto[]>("/api/texademia/invitations");
+  return data.map(mapInvitation);
+}
+
+export async function acceptInvitation(invitationId: string): Promise<void> {
+  await api.post(`/api/texademia/invitations/${invitationId}/accept`);
+}
+
+export async function declineInvitation(invitationId: string): Promise<void> {
+  await api.post(`/api/texademia/invitations/${invitationId}/decline`);
+}
