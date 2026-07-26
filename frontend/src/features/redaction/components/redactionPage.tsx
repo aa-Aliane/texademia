@@ -129,7 +129,6 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
         opened={collaboratorsDialogOpened}
         onClose={() => setCollaboratorsDialogOpened(false)}
         documentId={documentId}
-        collaborators={document.collaborators}
       />
     </div>
   );

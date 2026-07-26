@@ -23,6 +23,7 @@ frontend/src/features
     │   └── redaction.ts
     ├── components
     │   ├── blameExtension.ts
+    │   ├── collaboratorsDialog.tsx
     │   ├── compileButton.tsx
     │   ├── createDocumentDialog.tsx
     │   ├── documentHeader.tsx
@@ -32,9 +33,11 @@ frontend/src/features
     │   ├── duplicateDocumentDialog.tsx
     │   ├── editor.tsx
     │   ├── fileTabs.tsx
+    │   ├── invitationsBell.tsx
     │   ├── pdfPreview.tsx
     │   └── redactionPage.tsx
     ├── hooks
+    │   ├── useCollaborators.ts
     │   ├── useCompileDocument.ts
     │   ├── useDocuments.ts
     │   └── useUpdateDocumentTitle.ts
@@ -465,7 +468,7 @@ export interface User {
 // redaction/api/redaction.ts
 import { queryOptions } from "@tanstack/react-query";
 import { api, toPublicUrl } from "#/shared/api/client";
-import type { ProjectFile, RedactionDocument } from "../types/redaction";
+import type { ProjectFile, RedactionDocument, Collaborator, CollaboratorRole, Invitation } from "../types/redaction";
 
 interface FileDto {
   id: string;
@@ -475,14 +478,24 @@ interface FileDto {
   line_authors?: { author: string; edited_at: string }[] | null;
 }
 
+interface CollaboratorDto {
+  id: string;
+  user_id: string;
+  email: string;
+  role: CollaboratorRole;
+  status: "pending" | "accepted";
+}
+
 interface DocumentDto {
   id: string;
   title: string;
   template: string;
   files: FileDto[];
   pdf_url: string | null;
-  created_at: string; // NEW
-  updated_at: string; // NEW
+  created_at: string;
+  updated_at: string;
+  role: string; // NEW — "owner" | "writer" | "reader"
+  collaborators: CollaboratorDto[]; // NEW
 }
 
 function mapDocument(data: DocumentDto): RedactionDocument {
@@ -491,8 +504,16 @@ function mapDocument(data: DocumentDto): RedactionDocument {
     title: data.title,
     template: data.template,
     pdfUrl: data.pdf_url ? toPublicUrl(data.pdf_url) : null,
-    createdAt: data.created_at, // NEW
-    updatedAt: data.updated_at, // NEW
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+    role: data.role, // NEW
+    collaborators: (data.collaborators ?? []).map((c) => ({ // NEW
+      id: c.id,
+      userId: c.user_id,
+      email: c.email,
+      role: c.role,
+      status: c.status,
+    })),
     files: data.files.map((f) => ({
       id: f.id,
       name: f.name,
@@ -541,7 +562,6 @@ export async function duplicateDocument(
   return mapDocument(data);
 }
 
-// NEW: real delete, backed by the existing DELETE /documents/{id} endpoint
 export async function deleteDocument(documentId: string): Promise<void> {
   await api.delete(`/api/texademia/documents/${documentId}`);
 }
@@ -571,10 +591,8 @@ export async function startCompileJob(
   documentId: string,
   files: ProjectFile[]
 ): Promise<CompileJobResponse> {
-  // First: save all files
   await Promise.all(files.map((f) => saveFile(documentId, f.id, f.content)));
 
-  // Then: enqueue compilation job
   const data = await api.post<{ job_id: string; status: string }>(
     `/api/texademia/documents/${documentId}/compile`
   );
@@ -607,6 +625,69 @@ export const documentsQueryOptions = (cookieHeader?: string | null) =>
     queryKey: ["documents"],
     queryFn: () => listDocuments(cookieHeader),
   });
+
+// ============================================
+// Collaborators & invitations — NEW
+// ============================================
+
+export async function inviteCollaborator(
+  documentId: string,
+  email: string,
+  role: CollaboratorRole
+): Promise<Collaborator> {
+  const data = await api.post<CollaboratorDto>(`/api/texademia/documents/${documentId}/collaborators`, {
+    email,
+    role,
+  });
+  return { id: data.id, userId: data.user_id, email: data.email, role: data.role, status: data.status };
+}
+
+export async function updateCollaboratorRole(
+  documentId: string,
+  collaboratorId: string,
+  role: CollaboratorRole
+): Promise<Collaborator> {
+  const data = await api.patch<CollaboratorDto>(
+    `/api/texademia/documents/${documentId}/collaborators/${collaboratorId}`,
+    { role }
+  );
+  return { id: data.id, userId: data.user_id, email: data.email, role: data.role, status: data.status };
+}
+
+export async function removeCollaborator(documentId: string, collaboratorId: string): Promise<void> {
+  await api.delete(`/api/texademia/documents/${documentId}/collaborators/${collaboratorId}`);
+}
+
+interface InvitationDto {
+  id: string;
+  document_id: string;
+  document_title: string;
+  role: CollaboratorRole;
+  invited_by_email: string;
+}
+
+function mapInvitation(data: InvitationDto): Invitation {
+  return {
+    id: data.id,
+    documentId: data.document_id,
+    documentTitle: data.document_title,
+    role: data.role,
+    invitedByEmail: data.invited_by_email,
+  };
+}
+
+export async function getPendingInvitations(): Promise<Invitation[]> {
+  const data = await api.get<InvitationDto[]>("/api/texademia/invitations");
+  return data.map(mapInvitation);
+}
+
+export async function acceptInvitation(invitationId: string): Promise<void> {
+  await api.post(`/api/texademia/invitations/${invitationId}/accept`);
+}
+
+export async function declineInvitation(invitationId: string): Promise<void> {
+  await api.post(`/api/texademia/invitations/${invitationId}/decline`);
+}
 
 ```
 
@@ -687,6 +768,108 @@ export const blameLinePlugin = EditorView.decorations.compute(
 );
 
 export const blameExtension = [lineAuthorsField, blameLinePlugin];
+
+```
+
+
+## redaction/components/collaboratorsDialog.tsx
+
+```tsx
+// redaction/components/collaboratorsDialog.tsx
+import { Modal, Stack, TextInput, Select, Button, Group, Avatar, ActionIcon, Text } from "@mantine/core";
+import { IconTrash } from "@tabler/icons-react";
+import { useState } from "react";
+import { useInviteCollaborator, useUpdateCollaboratorRole, useRemoveCollaborator } from "../hooks/useCollaborators";
+import type { Collaborator, CollaboratorRole } from "../types/redaction";
+
+interface CollaboratorsDialogProps {
+  opened: boolean;
+  onClose: () => void;
+  documentId: string;
+  collaborators: Collaborator[];
+}
+
+export function CollaboratorsDialog({ opened, onClose, documentId, collaborators }: CollaboratorsDialogProps) {
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<CollaboratorRole>("reader");
+  const invite = useInviteCollaborator(documentId);
+  const updateRole = useUpdateCollaboratorRole(documentId);
+  const remove = useRemoveCollaborator(documentId);
+
+  const onInvite = () => {
+    invite.mutate({ email, role }, { onSuccess: () => setEmail("") });
+  };
+
+  return (
+    <Modal opened={opened} onClose={onClose} title="Collaborators">
+      <Stack>
+        <Group align="flex-end">
+          <TextInput
+            label="Email"
+            placeholder="colleague@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.currentTarget.value)}
+            style={{ flex: 1 }}
+          />
+          <Select
+            label="Access"
+            data={[
+              { value: "reader", label: "Can view" },
+              { value: "writer", label: "Can edit" },
+            ]}
+            value={role}
+            onChange={(v) => setRole((v as CollaboratorRole) ?? "reader")}
+            w={140}
+          />
+          <Button onClick={onInvite} loading={invite.isPending} disabled={!email}>
+            Invite
+          </Button>
+        </Group>
+        {invite.error && (
+          <Text c="red" size="sm">
+            {(invite.error as Error).message}
+          </Text>
+        )}
+
+        <Stack gap="xs">
+          {collaborators.map((c) => (
+            <Group key={c.id} justify="space-between">
+              <Group gap="sm">
+                <Avatar radius="xl">{c.email.slice(0, 2).toUpperCase()}</Avatar>
+                <div>
+                  <Text size="sm">{c.email}</Text>
+                  <Text size="xs" c="dimmed">
+                    {c.status === "pending" ? "Invitation pending" : "Active"}
+                  </Text>
+                </div>
+              </Group>
+              <Group gap="xs">
+                <Select
+                  data={[
+                    { value: "reader", label: "Can view" },
+                    { value: "writer", label: "Can edit" },
+                  ]}
+                  value={c.role}
+                  onChange={(v) => v && updateRole.mutate({ collaboratorId: c.id, role: v as CollaboratorRole })}
+                  w={130}
+                  size="xs"
+                />
+                <ActionIcon color="red" variant="subtle" onClick={() => remove.mutate(c.id)}>
+                  <IconTrash size={16} />
+                </ActionIcon>
+              </Group>
+            </Group>
+          ))}
+          {collaborators.length === 0 && (
+            <Text size="sm" c="dimmed" ta="center" py="md">
+              No collaborators yet — invite someone above.
+            </Text>
+          )}
+        </Stack>
+      </Stack>
+    </Modal>
+  );
+}
 
 ```
 
@@ -821,7 +1004,9 @@ interface DocumentHeaderProps {
   compileLog: string | null;
   template: string;
   pdfUrl: string | null;
-  onDuplicateClick: () => void; // NEW
+  onDuplicateClick: () => void;
+  onShareClick: () => void; // NEW
+  role: string;             // NEW
 }
 
 function EditableTitle({
@@ -973,10 +1158,12 @@ export function DocumentHeader({
   compileLog,
   template,
   pdfUrl,
-  onDuplicateClick, // NEW
+  onDuplicateClick,
+  onShareClick, // NEW
+  role,         // NEW
 }: DocumentHeaderProps) {
   const isCompiling = compilePhase === "saving" || compilePhase === "queued" || compilePhase === "running";
-  const hasCompiledBefore = compilePhase === "done" || !!pdfUrl; // NEW
+  const hasCompiledBefore = compilePhase === "done" || !!pdfUrl;
 
   return (
     <>
@@ -998,7 +1185,13 @@ export function DocumentHeader({
             error={compileError}
             log={compileLog}
           />
-          <DocumentMenu template={template} pdfUrl={pdfUrl} onDuplicateClick={onDuplicateClick} />
+          <DocumentMenu
+            template={template}
+            pdfUrl={pdfUrl}
+            onDuplicateClick={onDuplicateClick}
+            onShareClick={onShareClick}
+            role={role}
+          />
           <CompileButton onCompile={onCompile} isCompiling={isCompiling} hasCompiledBefore={hasCompiledBefore} />
         </Group>
       </AppShellHeaderPortal>
@@ -1020,12 +1213,15 @@ import {
   IconDownload,
   IconFileZip,
   IconTrash,
+  IconUsers,
 } from "@tabler/icons-react";
 
 interface DocumentMenuProps {
   template: string;
   pdfUrl: string | null;
-  onDuplicateClick: () => void; // NEW
+  onDuplicateClick: () => void;
+  onShareClick: () => void;
+  role: string; // "owner" | "writer" | "reader"
 }
 
 const TEMPLATE_LABELS: Record<string, string> = {
@@ -1035,7 +1231,7 @@ const TEMPLATE_LABELS: Record<string, string> = {
   acl: "ACL",
 };
 
-export function DocumentMenu({ template, pdfUrl, onDuplicateClick }: DocumentMenuProps) {
+export function DocumentMenu({ template, pdfUrl, onDuplicateClick, onShareClick, role }: DocumentMenuProps) {
   return (
     <Menu position="bottom-end" shadow="md" width={240}>
       <Menu.Target>
@@ -1051,6 +1247,12 @@ export function DocumentMenu({ template, pdfUrl, onDuplicateClick }: DocumentMen
             {TEMPLATE_LABELS[template] ?? template}
           </Badge>
         </Menu.Label>
+
+        {role === "owner" && (
+          <Menu.Item leftSection={<IconUsers size={16} />} onClick={onShareClick}>
+            Manage collaborators
+          </Menu.Item>
+        )}
 
         <Menu.Item
           leftSection={<IconDownload size={16} />}
@@ -1134,6 +1336,7 @@ import {
 } from "@tanstack/react-table";
 import {
   ActionIcon,
+  Avatar,
   Badge,
   Box,
   Button,
@@ -1151,15 +1354,18 @@ import {
   IconChevronDown,
   IconChevronUp,
   IconCopy,
+  IconCrown,
   IconDownload,
   IconFileText,
   IconPlus,
   IconSearch,
   IconTrash,
+  IconUsers,
 } from "@tabler/icons-react";
 import { createDocument, deleteDocument, documentsQueryOptions, duplicateDocument } from "../api/redaction";
 import { CreateDocumentDialog } from "./createDocumentDialog";
 import { DuplicateDocumentDialog } from "./duplicateDocumentDialog";
+import { CollaboratorsDialog } from "./collaboratorsDialog"; // NEW
 import type { RedactionDocument } from "../types/redaction";
 import classes from "./documentsListPage.module.css";
 
@@ -1186,6 +1392,7 @@ export function DocumentsListPage() {
   const [dialogOpened, setDialogOpened] = useState(false);
   const [duplicateTarget, setDuplicateTarget] = useState<RedactionDocument | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<RedactionDocument | null>(null);
+  const [collaboratorsTarget, setCollaboratorsTarget] = useState<RedactionDocument | null>(null); // NEW
   const [globalFilter, setGlobalFilter] = useState("");
   const [sorting, setSorting] = useState<SortingState>([{ id: "updatedAt", desc: true }]);
 
@@ -1227,9 +1434,21 @@ export function DocumentsListPage() {
             <Group gap="sm" wrap="nowrap">
               <IconFileText size={18} color="var(--mantine-color-gray-6)" />
               <Stack gap={2}>
-                <Text fw={600} c="blue.9" size="sm">
-                  {doc.title}
-                </Text>
+                <Group gap={6} wrap="nowrap">
+                  <Text fw={600} c="blue.9" size="sm">
+                    {doc.title}
+                  </Text>
+                  {doc.role === "owner" && (
+                    <Badge
+                      size="xs"
+                      color="blue"
+                      variant="filled"
+                      leftSection={<IconCrown size={10} />}
+                    >
+                      Owner
+                    </Badge>
+                  )}
+                </Group>
                 <Text ff="monospace" fz={11} c="dimmed">
                   {TEMPLATE_LABELS[doc.template] ?? doc.template} · {doc.files.length}{" "}
                   {doc.files.length === 1 ? "file" : "files"}
@@ -1239,13 +1458,48 @@ export function DocumentsListPage() {
           );
         },
       }),
-      columnHelper.accessor("id", {
-        header: "Template",
-        cell: (info) => (
-          <Text ta="center" ff="monospace" fz={12} c="dimmed">
-            #{info.getValue().slice(0, 8).toUpperCase()}
-          </Text>
-        ),
+      columnHelper.display({
+        id: "collaborators",
+        header: "Access",
+        cell: (info) => {
+          const doc = info.row.original;
+          const others = doc.collaborators ?? [];
+
+          if (others.length === 0) {
+            return (
+              <Text size="xs" c="dimmed" ta="center">
+                Only you
+              </Text>
+            );
+          }
+
+          return (
+            <Avatar.Group spacing="sm">
+              {others.slice(0, 4).map((c) => (
+                <Tooltip
+                  key={c.id}
+                  label={`${c.email} · ${c.role === "writer" ? "Can edit" : "Can view"}${
+                    c.status === "pending" ? " (pending)" : ""
+                  }`}
+                >
+                  <Avatar
+                    radius="xl"
+                    size={28}
+                    color={c.status === "pending" ? "gray" : "blue"}
+                    variant={c.status === "pending" ? "light" : "filled"}
+                  >
+                    {c.email.slice(0, 2).toUpperCase()}
+                  </Avatar>
+                </Tooltip>
+              ))}
+              {others.length > 4 && (
+                <Avatar radius="xl" size={28}>
+                  +{others.length - 4}
+                </Avatar>
+              )}
+            </Avatar.Group>
+          );
+        },
         enableSorting: false,
       }),
       columnHelper.accessor("updatedAt", {
@@ -1278,6 +1532,20 @@ export function DocumentsListPage() {
           return (
             <Box className={classes.actionsCell} h="100%" mih={40}>
               <div className={classes.overlay}>
+                {doc.role === "owner" && (
+                  <Tooltip label="Share">
+                    <ActionIcon
+                      variant="subtle"
+                      color="blue"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCollaboratorsTarget(doc);
+                      }}
+                    >
+                      <IconUsers size={16} />
+                    </ActionIcon>
+                  </Tooltip>
+                )}
                 <Tooltip label="Duplicate">
                   <ActionIcon
                     variant="subtle"
@@ -1448,27 +1716,33 @@ export function DocumentsListPage() {
         isCreating={isCreating}
       />
 
-      {duplicateTarget && (
-        <DuplicateDocumentDialog
-          opened={!!duplicateTarget}
-          onClose={() => setDuplicateTarget(null)}
-          onDuplicate={(opts) => duplicate(opts)}
-          isDuplicating={isDuplicating}
-          sourceTitle={duplicateTarget.title}
-          sourceTemplate={duplicateTarget.template}
-        />
-      )}
+      <DuplicateDocumentDialog
+        opened={!!duplicateTarget}
+        onClose={() => setDuplicateTarget(null)}
+        onDuplicate={(opts) => duplicate(opts)}
+        isDuplicating={isDuplicating}
+        sourceTitle={duplicateTarget?.title ?? ""}
+        sourceTemplate={duplicateTarget?.template ?? "default"}
+      />
+
+      {/* NEW */}
+      <CollaboratorsDialog
+        opened={!!collaboratorsTarget}
+        onClose={() => setCollaboratorsTarget(null)}
+        documentId={collaboratorsTarget?.id ?? ""}
+        collaborators={collaboratorsTarget?.collaborators ?? []}
+      />
 
       <Modal opened={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete document" centered>
-        <Stack gap="md">
+        <Stack>
           <Text size="sm">
-            Delete <b>{deleteTarget?.title}</b>? This can't be undone.
+            Are you sure you want to delete <strong>{deleteTarget?.title}</strong>? This can't be undone.
           </Text>
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setDeleteTarget(null)}>
               Cancel
             </Button>
-            <Button color="red" loading={isDeleting} onClick={() => remove(deleteTarget!.id)}>
+            <Button color="red" loading={isDeleting} onClick={() => deleteTarget && remove(deleteTarget.id)}>
               Delete
             </Button>
           </Group>
@@ -1615,6 +1889,71 @@ export function FileTabs({ files, activeTabId, onSelect }: FileTabsProps) {
 ```
 
 
+## redaction/components/invitationsBell.tsx
+
+```tsx
+// redaction/components/invitationsBell.tsx
+import { Popover, ActionIcon, Indicator, Stack, Group, Text, Button, Skeleton, Badge } from "@mantine/core";
+import { IconBell } from "@tabler/icons-react";
+import { usePendingInvitations, useAcceptInvitation, useDeclineInvitation } from "../hooks/useCollaborators";
+
+export function InvitationsBell() {
+  const { data: invitations, isLoading } = usePendingInvitations();
+  const accept = useAcceptInvitation();
+  const decline = useDeclineInvitation();
+
+  const count = invitations?.length ?? 0;
+
+  return (
+    <Popover position="bottom-end" withArrow shadow="md" width={320}>
+      <Popover.Target>
+        <Indicator disabled={count === 0} label={count} size={16} color="red" offset={4}>
+          <ActionIcon variant="subtle" size="lg" aria-label="Invitations">
+            <IconBell size={20} />
+          </ActionIcon>
+        </Indicator>
+      </Popover.Target>
+
+      <Popover.Dropdown>
+        <Stack gap="sm">
+          <Text fw={600} size="sm">Invitations</Text>
+
+          {isLoading && <Skeleton height={60} radius="sm" />}
+
+          {!isLoading && count === 0 && (
+            <Text size="sm" c="dimmed">No pending invitations.</Text>
+          )}
+
+          {invitations?.map((inv) => (
+            <Group key={inv.id} justify="space-between" wrap="nowrap" align="flex-start">
+              <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
+                <Text size="sm" fw={500} truncate>{inv.documentTitle}</Text>
+                <Group gap={4}>
+                  <Text size="xs" c="dimmed">from {inv.invitedByEmail}</Text>
+                  <Badge size="xs" variant="light">
+                    {inv.role === "writer" ? "Can edit" : "Can view"}
+                  </Badge>
+                </Group>
+              </Stack>
+              <Group gap={4} wrap="nowrap">
+                <Button size="xs" variant="light" loading={decline.isPending} onClick={() => decline.mutate(inv.id)}>
+                  Decline
+                </Button>
+                <Button size="xs" loading={accept.isPending} onClick={() => accept.mutate(inv.id)}>
+                  Accept
+                </Button>
+              </Group>
+            </Group>
+          ))}
+        </Stack>
+      </Popover.Dropdown>
+    </Popover>
+  );
+}
+
+```
+
+
 ## redaction/components/pdfPreview.tsx
 
 ```tsx
@@ -1654,10 +1993,11 @@ import { Editor } from "./editor";
 import { PdfPreview } from "./pdfPreview";
 import { FileTabs, PREVIEW_TAB_ID } from "./fileTabs";
 import { DocumentHeader } from "./documentHeader";
-import { DuplicateDocumentDialog } from "./duplicateDocumentDialog"; // NEW
+import { DuplicateDocumentDialog } from "./duplicateDocumentDialog";
+import { CollaboratorsDialog } from "./collaboratorsDialog"; // NEW
 import { useCompileDocument } from "../hooks/useCompileDocument";
 import { useUpdateDocumentTitle } from "../hooks/useUpdateDocumentTitle";
-import { documentQueryOptions, duplicateDocument } from "../api/redaction"; // CHANGED
+import { documentQueryOptions, duplicateDocument } from "../api/redaction";
 import type { ProjectFile } from "../types/redaction";
 
 interface RedactionPageProps {
@@ -1666,13 +2006,14 @@ interface RedactionPageProps {
 
 export function RedactionPage({ documentId }: RedactionPageProps) {
   const { data: document } = useQuery(documentQueryOptions(documentId));
-  const navigate = useNavigate(); // NEW
-  const queryClient = useQueryClient(); // NEW
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [activeFileId, setActiveFileId] = useState<string | null>(null);
   const [activeTabId, setActiveTabId] = useState<string>("");
-  const [duplicateDialogOpened, setDuplicateDialogOpened] = useState(false); // NEW
+  const [duplicateDialogOpened, setDuplicateDialogOpened] = useState(false);
+  const [collaboratorsDialogOpened, setCollaboratorsDialogOpened] = useState(false); // NEW
 
   const {
     compile,
@@ -1687,7 +2028,6 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
 
   const { mutate: saveTitle, isPending: isSavingTitle } = useUpdateDocumentTitle(documentId);
 
-  // NEW: duplicate mutation
   const { mutate: duplicate, isPending: isDuplicating } = useMutation({
     mutationFn: (opts: { template: string; title: string }) =>
       duplicateDocument(documentId, opts),
@@ -1742,7 +2082,9 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
         compileLog={compileLog}
         template={document.template}
         pdfUrl={pdfUrl}
-        onDuplicateClick={() => setDuplicateDialogOpened(true)} // NEW
+        onDuplicateClick={() => setDuplicateDialogOpened(true)}
+        onShareClick={() => setCollaboratorsDialogOpened(true)} // NEW
+        role={document.role}                                    // NEW
       />
 
       <FileTabs files={files} activeTabId={currentTabId} onSelect={handleSelectTab} />
@@ -1760,7 +2102,6 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
         ) : null}
       </div>
 
-      {/* NEW */}
       <DuplicateDocumentDialog
         opened={duplicateDialogOpened}
         onClose={() => setDuplicateDialogOpened(false)}
@@ -1769,8 +2110,92 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
         sourceTitle={document.title}
         sourceTemplate={document.template}
       />
+
+      {/* NEW */}
+      <CollaboratorsDialog
+        opened={collaboratorsDialogOpened}
+        onClose={() => setCollaboratorsDialogOpened(false)}
+        documentId={documentId}
+        collaborators={document.collaborators}
+      />
     </div>
   );
+}
+
+```
+
+
+## redaction/hooks/useCollaborators.ts
+
+```ts
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  inviteCollaborator,
+  updateCollaboratorRole,
+  removeCollaborator,
+  getPendingInvitations,
+  acceptInvitation,
+  declineInvitation,
+} from "../api/redaction";
+import type { CollaboratorRole } from "../types/redaction";
+
+export function useInviteCollaborator(documentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ email, role }: { email: string; role: CollaboratorRole }) =>
+      inviteCollaborator(documentId, email, role),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["document", documentId] });
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+    },
+  });
+}
+
+export function useUpdateCollaboratorRole(documentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ collaboratorId, role }: { collaboratorId: string; role: CollaboratorRole }) =>
+      updateCollaboratorRole(documentId, collaboratorId, role),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["document", documentId] }),
+  });
+}
+
+export function useRemoveCollaborator(documentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (collaboratorId: string) => removeCollaborator(documentId, collaboratorId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["document", documentId] });
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+    },
+  });
+}
+
+export function usePendingInvitations() {
+  return useQuery({
+    queryKey: ["invitations"],
+    queryFn: getPendingInvitations,
+    refetchInterval: 30_000, // poll — there's no push mechanism without email/websockets
+  });
+}
+
+export function useAcceptInvitation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: acceptInvitation,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["invitations"] });
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+    },
+  });
+}
+
+export function useDeclineInvitation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: declineInvitation,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["invitations"] }),
+  });
 }
 
 ```
@@ -1941,6 +2366,7 @@ export function useUpdateDocumentTitle(documentId: string) {
 // redaction/index.ts
 export { RedactionPage } from "./components/redactionPage";
 export { DocumentsListPage } from "./components/documentsListPage";
+export { InvitationsBell } from "./components/invitationsBell"; // NEW
 export {
   createDocument,
   deleteDocument,
@@ -2027,6 +2453,36 @@ export interface CompileResponse {
 export interface CompileError {
   message: string;
   log?: string;
+}
+
+export type CollaboratorRole = "reader" | "writer";
+
+export interface Collaborator {
+  id: string;
+  userId: string;
+  email: string;
+  role: CollaboratorRole;
+  status: "pending" | "accepted";
+}
+
+export interface RedactionDocument {
+  id: string;
+  title: string;
+  template: string;
+  files: ProjectFile[];
+  pdfUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+  role: "owner" | CollaboratorRole;
+  collaborators: Collaborator[];
+}
+
+export interface Invitation {
+  id: string;
+  documentId: string;
+  documentTitle: string;
+  role: CollaboratorRole;
+  invitedByEmail: string;
 }
 
 ```

@@ -13,6 +13,8 @@ import {
 } from "@tanstack/react-table";
 import {
   ActionIcon,
+  Indicator,
+  Avatar,
   Badge,
   Box,
   Button,
@@ -30,12 +32,14 @@ import {
   IconChevronDown,
   IconChevronUp,
   IconCopy,
+  IconCrown,
   IconDownload,
   IconFileText,
   IconPlus,
   IconSearch,
   IconTrash,
   IconUsers,
+  IconClock,
 } from "@tabler/icons-react";
 import { createDocument, deleteDocument, documentsQueryOptions, duplicateDocument } from "../api/redaction";
 import { CreateDocumentDialog } from "./createDocumentDialog";
@@ -109,9 +113,21 @@ export function DocumentsListPage() {
             <Group gap="sm" wrap="nowrap">
               <IconFileText size={18} color="var(--mantine-color-gray-6)" />
               <Stack gap={2}>
-                <Text fw={600} c="blue.9" size="sm">
-                  {doc.title}
-                </Text>
+                <Group gap={6} wrap="nowrap">
+                  <Text fw={600} c="blue.9" size="sm">
+                    {doc.title}
+                  </Text>
+                  {doc.role === "owner" && (
+                    <Badge
+                      size="xs"
+                      color="blue"
+                      variant="filled"
+                      leftSection={<IconCrown size={10} />}
+                    >
+                      Owner
+                    </Badge>
+                  )}
+                </Group>
                 <Text ff="monospace" fz={11} c="dimmed">
                   {TEMPLATE_LABELS[doc.template] ?? doc.template} · {doc.files.length}{" "}
                   {doc.files.length === 1 ? "file" : "files"}
@@ -121,15 +137,60 @@ export function DocumentsListPage() {
           );
         },
       }),
-      columnHelper.accessor("id", {
-        header: "Template",
-        cell: (info) => (
-          <Text ta="center" ff="monospace" fz={12} c="dimmed">
-            #{info.getValue().slice(0, 8).toUpperCase()}
-          </Text>
-        ),
-        enableSorting: false,
-      }),
+      columnHelper.display({
+              id: "collaborators",
+              header: "Access",
+              cell: (info) => {
+                const doc = info.row.original;
+                const others = doc.collaborators ?? [];
+
+                if (others.length === 0) {
+                  return (
+                    <Text size="xs" c="dimmed" ta="center">
+                      Only you
+                    </Text>
+                  );
+                }
+
+                return (
+                  <Group gap={6} wrap="nowrap">
+                    {others.slice(0, 4).map((c) => (
+                      <Tooltip
+                        key={c.id}
+                        label={`${c.email} · ${c.role === "writer" ? "Can edit" : "Can view"}${
+                          c.status === "pending" ? " (invitation pending)" : ""
+                        }`}
+                      >
+                        <Indicator
+                          disabled={c.status !== "pending"}
+                          size={14}
+                          color="var(--color-warning)"
+                          offset={3}
+                          position="bottom-end"
+                          label={<IconClock size={9} />}
+                          styles={{ indicator: { padding: 0 } }}
+                        >
+                          <Avatar
+                            radius="xl"
+                            size={28}
+                            color={c.status === "pending" ? "gray" : "blue"}
+                            variant={c.status === "pending" ? "light" : "filled"}
+                          >
+                            {c.email.slice(0, 2).toUpperCase()}
+                          </Avatar>
+                        </Indicator>
+                      </Tooltip>
+                    ))}
+                    {others.length > 4 && (
+                      <Avatar radius="xl" size={28}>
+                        +{others.length - 4}
+                      </Avatar>
+                    )}
+                  </Group>
+                );
+              },
+              enableSorting: false,
+            }),
       columnHelper.accessor("updatedAt", {
         header: "Last Modified",
         cell: (info) => (
