@@ -73,6 +73,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.prod
+<<<<<<< HEAD
       args:
         VITE_API_URL: ${VITE_API_URL}
     container_name: texademia_frontend
@@ -85,6 +86,16 @@ services:
     volumes:
       - frontend_static:/shared/static
     command: sh -c "rm -rf /shared/static/* && cp -r /app/dist/client/. /shared/static/ && node server-entry.mjs"
+=======
+    container_name: texademia_frontend
+    restart: unless-stopped
+    environment:
+      - VITE_API_URL=          # empty on purpose: same-origin, nginx routes /api for us
+      - INTERNAL_API_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+>>>>>>> auth
     networks:
       - internal
       - web
@@ -92,8 +103,11 @@ services:
 volumes:
   postgres_data:
   compiled_pdfs:
+<<<<<<< HEAD
   frontend_static:
     name: texademia_frontend_static
+=======
+>>>>>>> auth
 
 networks:
   internal:
