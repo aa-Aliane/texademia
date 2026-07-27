@@ -20,14 +20,26 @@ function toPublicUrl(path: string): string {
   return `${import.meta.env.VITE_API_URL ?? ""}${path}`;
 }
 
+function addCacheBuster(url: string, key: string): string {
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}v=${key}`;
+}
+
 export function useCompileDocument(documentId: string, initialPdfUrl: string | null) {
   const queryClient = useQueryClient();
   const [jobId, setJobId] = useState<string | null>(null);
+  // Busts browser/iframe caching for the PDF URL. The mount-time key keeps the
+  // initial preview fresh; each compile uses its job id so recompiles always
+  // reload instead of showing a stale cached PDF.
+  const [pdfCacheKey] = useState(() => `${Date.now()}`);
 
   const startMutation = useMutation({
     mutationFn: (files: ProjectFile[]) => startCompileJob(documentId, files),
     onSuccess: (data) => {
       setJobId(data.jobId);
+      // Files were just saved; refresh the server snapshot so the dirty count
+      // drops to zero after a successful recompile.
+      queryClient.invalidateQueries({ queryKey: ["document", documentId] });
     },
   });
 
@@ -60,8 +72,14 @@ export function useCompileDocument(documentId: string, initialPdfUrl: string | n
   const progress = pollQuery.data?.percent ?? (startMutation.isPending ? 5 : 0);
   const message = pollQuery.data?.message ?? (startMutation.isPending ? "Saving files..." : "Ready");
   const pdfUrl = pollQuery.data?.result?.pdf_url
-    ? toPublicUrl(pollQuery.data.result.pdf_url)
-    : (!jobId ? initialPdfUrl : null);
+    ? addCacheBuster(toPublicUrl(pollQuery.data.result.pdf_url), jobId ?? pdfCacheKey)
+    : !jobId && initialPdfUrl
+      ? addCacheBuster(initialPdfUrl, pdfCacheKey)
+      : null;
+
+  // DEBUG
+  console.log("[compile] derived pdfUrl", { phase, jobId, pdfUrl });
+
   const error = pollQuery.data?.status === "error"
     ? (pollQuery.data.error ?? "Compilation failed")
     : startMutation.isError

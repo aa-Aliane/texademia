@@ -29,6 +29,7 @@ interface DocumentHeaderProps {
   compileLog: string | null;
   template: string;
   pdfUrl: string | null;
+  dirtyCount: number;
   onDuplicateClick: () => void;
   onShareClick: () => void; // NEW
   role: string;             // NEW
@@ -183,6 +184,7 @@ export function DocumentHeader({
   compileLog,
   template,
   pdfUrl,
+  dirtyCount,
   onDuplicateClick,
   onShareClick, // NEW
   role,         // NEW
@@ -217,7 +219,12 @@ export function DocumentHeader({
             onShareClick={onShareClick}
             role={role}
           />
-          <CompileButton onCompile={onCompile} isCompiling={isCompiling} hasCompiledBefore={hasCompiledBefore} />
+          <CompileButton
+            onCompile={onCompile}
+            isCompiling={isCompiling}
+            hasCompiledBefore={hasCompiledBefore}
+            dirtyCount={dirtyCount}
+          />
         </Group>
       </AppShellHeaderPortal>
     </>

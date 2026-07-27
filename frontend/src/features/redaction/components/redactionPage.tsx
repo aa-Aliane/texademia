@@ -22,9 +22,16 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [files, setFiles] = useState<ProjectFile[]>([]);
-  const [activeFileId, setActiveFileId] = useState<string | null>(null);
-  const [activeTabId, setActiveTabId] = useState<string>("");
+  // Initialized from the prefetched document so we don't need a useEffect to
+  // sync local file state. The route loader guarantees `document` exists on
+  // first render; the component remounts when documentId changes.
+  const [files, setFiles] = useState<ProjectFile[]>(() => document!.files);
+  const [activeFileId, setActiveFileId] = useState<string | null>(
+    () => document!.files[0]?.id ?? null
+  );
+  const [activeTabId, setActiveTabId] = useState<string>(
+    () => (document!.pdfUrl ? PREVIEW_TAB_ID : "")
+  );
   const [duplicateDialogOpened, setDuplicateDialogOpened] = useState(false);
   const [collaboratorsDialogOpened, setCollaboratorsDialogOpened] = useState(false); // NEW
 
@@ -51,17 +58,12 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
     },
   });
 
-  useEffect(() => {
-    if (document?.files) {
-      setFiles(document.files);
-      if (!activeFileId) {
-        setActiveFileId(document.files[0]?.id ?? null);
-        if (document.pdfUrl && !activeTabId) setActiveTabId(PREVIEW_TAB_ID);
-      }
-    }
-  }, [document]);
-
   if (!document) return null;
+
+  const dirtyCount = files.reduce((count, file) => {
+    const serverFile = document.files.find((f) => f.id === file.id);
+    return serverFile && file.content === serverFile.content ? count : count + 1;
+  }, 0);
 
   const currentTabId = activeTabId || activeFileId || "";
   const activeFile = files.find((f) => f.id === currentTabId);
@@ -95,6 +97,7 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
         compileLog={compileLog}
         template={document.template}
         pdfUrl={pdfUrl}
+        dirtyCount={dirtyCount}
         onDuplicateClick={() => setDuplicateDialogOpened(true)}
         onShareClick={() => setCollaboratorsDialogOpened(true)} // NEW
         role={document.role}                                    // NEW

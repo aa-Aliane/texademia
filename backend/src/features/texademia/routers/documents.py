@@ -277,6 +277,13 @@ async def compile_document(
 ):
     document, _role = await _get_accessible_document(document_id, session, user, require_write=True)
 
+    main_file = next((f for f in document.files if f.name.endswith(".tex")), None)
+    print(
+        f"[compile] doc={document_id} template={document.template} "
+        f"files={[(f.name, len(f.content)) for f in document.files]} "
+        f"main_snippet={main_file.content[:200]!r}" if main_file else "no-main"
+    )
+
     try:
         job_id = enqueue_compile_job(document.id, document.files, document.template)
     except CompilerError as e:

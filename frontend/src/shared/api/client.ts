@@ -26,19 +26,61 @@ interface RequestOptions extends RequestInit {
   cookieHeader?: string | null;
 }
 
+let refreshPromise: Promise<void> | null = null;
+
+async function refreshAccessToken(): Promise<void> {
+  if (refreshPromise) return refreshPromise;
+
+  const baseUrl = resolveBaseUrl();
+  refreshPromise = fetch(`${baseUrl}/api/auth/jwt/refresh`, {
+    method: "POST",
+    credentials: "include",
+  })
+    .then((res) => {
+      if (!res.ok) {
+        throw new ApiError("Refresh failed", res.status, null);
+      }
+    })
+    .finally(() => {
+      refreshPromise = null;
+    });
+
+  return refreshPromise;
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { cookieHeader, headers, ...rest } = options;
   const baseUrl = resolveBaseUrl();
 
-  const res = await fetch(`${baseUrl}${path}`, {
-    ...rest,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(cookieHeader ? { Cookie: cookieHeader } : {}),
-      ...headers,
-    },
-  });
+  const doFetch = () =>
+    fetch(`${baseUrl}${path}`, {
+      ...rest,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+        ...headers,
+      },
+    });
+
+  let res = await doFetch();
+
+  // On the client, if the access token expired, try to refresh it once and
+  // retry the original request. We can't refresh during SSR because there is
+  // no browser cookie jar there.
+  if (
+    res.status === 401 &&
+    typeof window !== "undefined" &&
+    path !== "/api/auth/jwt/refresh"
+  ) {
+    try {
+      await refreshAccessToken();
+      res = await doFetch();
+    } catch {
+      // Refresh failed; keep the original 401 response so the caller can
+      // redirect to login or surface the error.
+    }
+  }
 
   if (!res.ok) {
     let body: unknown = null;

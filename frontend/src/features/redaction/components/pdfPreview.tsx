@@ -13,6 +13,7 @@ export function PdfPreview({ pdfUrl }: PdfPreviewProps) {
 
   return (
     <iframe
+      key={pdfUrl}
       src={pdfUrl}
       title="PDF Preview"
       style={{ width: "100%", height: "100%", border: "1px solid #ccc" }}
