@@ -124,11 +124,21 @@ export async function startCompileJob(
   documentId: string,
   files: ProjectFile[]
 ): Promise<CompileJobResponse> {
+  // DEBUG: verify the editor content reaching the compile request
+  const mainFile = files.find((f) => f.name.endsWith(".tex"));
+  console.log("[compile] saving files before compile", {
+    documentId,
+    fileCount: files.length,
+    mainFileName: mainFile?.name,
+    mainContentSnippet: mainFile?.content.slice(0, 200),
+  });
+
   await Promise.all(files.map((f) => saveFile(documentId, f.id, f.content)));
 
   const data = await api.post<{ job_id: string; status: string }>(
     `/api/texademia/documents/${documentId}/compile`
   );
+  console.log("[compile] started job", data);
   return { jobId: data.job_id, status: data.status };
 }
 

@@ -47,24 +47,47 @@ async def get_user_manager(user_db=Depends(get_user_db)):
     yield UserManager(user_db)
 
 
-cookie_transport = CookieTransport(
+access_cookie_transport = CookieTransport(
     cookie_name="auth_token",
-    cookie_max_age=3600,
+    cookie_max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     cookie_samesite="lax",
     cookie_secure=os.getenv("ENVIRONMENT") == "production",
     cookie_path="/",
 )
 
+refresh_cookie_transport = CookieTransport(
+    cookie_name="refresh_token",
+    cookie_max_age=settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60,
+    cookie_samesite="lax",
+    cookie_secure=os.getenv("ENVIRONMENT") == "production",
+    cookie_path="/api/auth/jwt",
+)
 
-def get_jwt_strategy() -> JWTStrategy:
+
+def get_access_strategy() -> JWTStrategy:
     return JWTStrategy(
         secret=settings.SECRET_KEY,
         lifetime_seconds=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
 
 
-auth_backend = AuthenticationBackend(
+def get_refresh_strategy() -> JWTStrategy:
+    # Use a different signing key so a refresh token cannot be reused as an
+    # access token even if both cookies are present.
+    return JWTStrategy(
+        secret=f"{settings.SECRET_KEY}:refresh",
+        lifetime_seconds=settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60,
+    )
+
+
+access_backend = AuthenticationBackend(
     name="jwt",
-    transport=cookie_transport,
-    get_strategy=get_jwt_strategy,
+    transport=access_cookie_transport,
+    get_strategy=get_access_strategy,
+)
+
+refresh_backend = AuthenticationBackend(
+    name="jwt-refresh",
+    transport=refresh_cookie_transport,
+    get_strategy=get_refresh_strategy,
 )

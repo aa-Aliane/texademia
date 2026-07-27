@@ -56,6 +56,13 @@ def compile_latex_job(document_id: str, files_data: list[dict], template: str) -
     job = get_current_job()
     combined_log = []
 
+    main_file = next((f for f in files_data if f["name"].endswith(".tex")), None)
+    print(
+        f"[worker] doc={document_id} template={template} "
+        f"files={[(f['name'], len(f['content'])) for f in files_data]} "
+        f"main_snippet={main_file['content'][:200]!r}" if main_file else "no-main"
+    )
+
     def update_progress(step: str, percent: int, message: str = ""):
         if job:
             job.meta = {
