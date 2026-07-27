@@ -114,13 +114,13 @@ export function DocumentsListPage() {
               <IconFileText size={18} color="var(--mantine-color-gray-6)" />
               <Stack gap={2}>
                 <Group gap={6} wrap="nowrap">
-                  <Text fw={600} c="blue.9" size="sm">
+                  <Text fw={600} c="accent" size="sm">
                     {doc.title}
                   </Text>
                   {doc.role === "owner" && (
                     <Badge
                       size="xs"
-                      color="blue"
+                      color="accent"
                       variant="filled"
                       leftSection={<IconCrown size={10} />}
                     >
@@ -173,7 +173,7 @@ export function DocumentsListPage() {
                           <Avatar
                             radius="xl"
                             size={28}
-                            color={c.status === "pending" ? "gray" : "blue"}
+                            color={c.status === "pending" ? "gray" : "accent"}
                             variant={c.status === "pending" ? "light" : "filled"}
                           >
                             {c.email.slice(0, 2).toUpperCase()}
@@ -204,7 +204,7 @@ export function DocumentsListPage() {
         header: "Status",
         cell: (info) =>
           info.getValue() === "compiled" ? (
-            <Badge variant="outline" color="blue" radius="sm" ff="monospace">
+            <Badge variant="outline" color="accent" radius="sm" ff="monospace">
               Compiled
             </Badge>
           ) : (
@@ -225,7 +225,7 @@ export function DocumentsListPage() {
                   <Tooltip label="Share">
                     <ActionIcon
                       variant="subtle"
-                      color="blue"
+                      color="accent"
                       onClick={(e) => {
                         e.stopPropagation();
                         setCollaboratorsTarget(doc);
@@ -238,7 +238,7 @@ export function DocumentsListPage() {
                 <Tooltip label="Duplicate">
                   <ActionIcon
                     variant="subtle"
-                    color="blue"
+                    color="accent"
                     onClick={(e) => {
                       e.stopPropagation();
                       setDuplicateTarget(doc);
@@ -250,7 +250,7 @@ export function DocumentsListPage() {
                 <Tooltip label={doc.pdfUrl ? "Download PDF" : "Compile first"}>
                   <ActionIcon
                     variant="subtle"
-                    color="blue"
+                    color="accent"
                     disabled={!doc.pdfUrl}
                     component="a"
                     href={doc.pdfUrl ?? undefined}
@@ -310,7 +310,7 @@ export function DocumentsListPage() {
           <Text ff="monospace" fz={11} c="dimmed" tt="uppercase" style={{ letterSpacing: "0.2em" }}>
             System Storage
           </Text>
-          <Title order={2} c="blue.9">
+          <Title order={2} c="accent">
             Your Library
           </Title>
         </Stack>
@@ -327,7 +327,13 @@ export function DocumentsListPage() {
         maw={360}
       />
 
-      <Box style={{ border: "1px solid var(--mantine-color-gray-3)", borderRadius: "var(--mantine-radius-md)" }}>
+      <Box
+        style={{
+          border: "1px solid var(--mantine-color-gray-3)",
+          borderRadius: "var(--mantine-radius-md)",
+          overflow: "hidden",
+        }}
+      >
         <Table withColumnBorders highlightOnHover verticalSpacing="md" horizontalSpacing="lg">
           <Table.Thead bg="gray.0">
             {table.getHeaderGroups().map((headerGroup) => (

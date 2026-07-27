@@ -777,27 +777,75 @@ export const blameExtension = [lineAuthorsField, blameLinePlugin];
 ```tsx
 // redaction/components/collaboratorsDialog.tsx
 import { Modal, Stack, TextInput, Select, Button, Group, Avatar, ActionIcon, Text } from "@mantine/core";
-import { IconTrash } from "@tabler/icons-react";
+import { IconTrash, IconCheck, IconX } from "@tabler/icons-react";
 import { useState } from "react";
+import { useDocument } from "../hooks/useDocuments";
 import { useInviteCollaborator, useUpdateCollaboratorRole, useRemoveCollaborator } from "../hooks/useCollaborators";
-import type { Collaborator, CollaboratorRole } from "../types/redaction";
+import type { CollaboratorRole } from "../types/redaction";
 
 interface CollaboratorsDialogProps {
   opened: boolean;
   onClose: () => void;
   documentId: string;
-  collaborators: Collaborator[];
 }
 
-export function CollaboratorsDialog({ opened, onClose, documentId, collaborators }: CollaboratorsDialogProps) {
+const ROLE_OPTIONS = [
+  { value: "reader", label: "Can view" },
+  { value: "writer", label: "Can edit" },
+];
+
+export function CollaboratorsDialog({ opened, onClose, documentId }: CollaboratorsDialogProps) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<CollaboratorRole>("reader");
+  const [pendingRoles, setPendingRoles] = useState<Record<string, CollaboratorRole>>({});
+
+  const { data: document } = useDocument(documentId);
+  const collaborators = document?.collaborators ?? [];
+
   const invite = useInviteCollaborator(documentId);
   const updateRole = useUpdateCollaboratorRole(documentId);
   const remove = useRemoveCollaborator(documentId);
 
   const onInvite = () => {
     invite.mutate({ email, role }, { onSuccess: () => setEmail("") });
+  };
+
+  const onSelectChange = (collaboratorId: string, currentRole: CollaboratorRole, value: string | null) => {
+    if (!value) return;
+    if (value === currentRole) {
+      setPendingRoles((prev) => {
+        const next = { ...prev };
+        delete next[collaboratorId];
+        return next;
+      });
+      return;
+    }
+    setPendingRoles((prev) => ({ ...prev, [collaboratorId]: value as CollaboratorRole }));
+  };
+
+  const onConfirmRole = (collaboratorId: string) => {
+    const newRole = pendingRoles[collaboratorId];
+    if (!newRole) return;
+    updateRole.mutate(
+      { collaboratorId, role: newRole },
+      {
+        onSuccess: () => {
+          setPendingRoles((prev) => {
+            const next = { ...prev };
+            delete next[collaboratorId];
+            return next;
+          });
+        },
+      }
+    );
+  };
+
+  const onCancelRole = (collaboratorId: string) => {
+    setPendingRoles((prev) => {
+      const next = { ...prev };
+      delete next[collaboratorId];
+      return next;
+    });
   };
 
   return (
@@ -813,10 +861,7 @@ export function CollaboratorsDialog({ opened, onClose, documentId, collaborators
           />
           <Select
             label="Access"
-            data={[
-              { value: "reader", label: "Can view" },
-              { value: "writer", label: "Can edit" },
-            ]}
+            data={ROLE_OPTIONS}
             value={role}
             onChange={(v) => setRole((v as CollaboratorRole) ?? "reader")}
             w={140}
@@ -832,34 +877,60 @@ export function CollaboratorsDialog({ opened, onClose, documentId, collaborators
         )}
 
         <Stack gap="xs">
-          {collaborators.map((c) => (
-            <Group key={c.id} justify="space-between">
-              <Group gap="sm">
-                <Avatar radius="xl">{c.email.slice(0, 2).toUpperCase()}</Avatar>
-                <div>
-                  <Text size="sm">{c.email}</Text>
-                  <Text size="xs" c="dimmed">
-                    {c.status === "pending" ? "Invitation pending" : "Active"}
-                  </Text>
-                </div>
+          {collaborators.map((c) => {
+            const isOptimistic = c.id.startsWith("optimistic-");
+            const pending = pendingRoles[c.id];
+            const isDirty = !!pending && pending !== c.role;
+            const isSavingThis = updateRole.isPending && updateRole.variables?.collaboratorId === c.id;
+            const isRemovingThis = remove.isPending && remove.variables === c.id;
+
+            return (
+              <Group key={c.id} justify="space-between">
+                <Group gap="sm">
+                  <Avatar radius="xl">{c.email.slice(0, 2).toUpperCase()}</Avatar>
+                  <div>
+                    <Text size="sm">{c.email}</Text>
+                    <Text size="xs" c="dimmed">
+                      {isOptimistic
+                        ? "Sending invite…"
+                        : c.status === "pending"
+                        ? "Invitation pending"
+                        : "Active"}
+                    </Text>
+                  </div>
+                </Group>
+                <Group gap="xs">
+                  <Select
+                    data={ROLE_OPTIONS}
+                    value={pending ?? c.role}
+                    onChange={(v) => onSelectChange(c.id, c.role, v)}
+                    w={130}
+                    size="xs"
+                    disabled={isSavingThis || isOptimistic || isRemovingThis}
+                  />
+                  {isDirty && (
+                    <>
+                      <ActionIcon color="green" variant="subtle" onClick={() => onConfirmRole(c.id)} loading={isSavingThis} aria-label="Confirm role change">
+                        <IconCheck size={16} />
+                      </ActionIcon>
+                      <ActionIcon color="gray" variant="subtle" onClick={() => onCancelRole(c.id)} disabled={isSavingThis} aria-label="Cancel role change">
+                        <IconX size={16} />
+                      </ActionIcon>
+                    </>
+                  )}
+                  <ActionIcon
+                    color="red"
+                    variant="subtle"
+                    onClick={() => remove.mutate(c.id)}
+                    loading={isRemovingThis}
+                    disabled={isDirty || isOptimistic}
+                  >
+                    <IconTrash size={16} />
+                  </ActionIcon>
+                </Group>
               </Group>
-              <Group gap="xs">
-                <Select
-                  data={[
-                    { value: "reader", label: "Can view" },
-                    { value: "writer", label: "Can edit" },
-                  ]}
-                  value={c.role}
-                  onChange={(v) => v && updateRole.mutate({ collaboratorId: c.id, role: v as CollaboratorRole })}
-                  w={130}
-                  size="xs"
-                />
-                <ActionIcon color="red" variant="subtle" onClick={() => remove.mutate(c.id)}>
-                  <IconTrash size={16} />
-                </ActionIcon>
-              </Group>
-            </Group>
-          ))}
+            );
+          })}
           {collaborators.length === 0 && (
             <Text size="sm" c="dimmed" ta="center" py="md">
               No collaborators yet — invite someone above.
@@ -1336,6 +1407,7 @@ import {
 } from "@tanstack/react-table";
 import {
   ActionIcon,
+  Indicator,
   Avatar,
   Badge,
   Box,
@@ -1361,6 +1433,7 @@ import {
   IconSearch,
   IconTrash,
   IconUsers,
+  IconClock,
 } from "@tabler/icons-react";
 import { createDocument, deleteDocument, documentsQueryOptions, duplicateDocument } from "../api/redaction";
 import { CreateDocumentDialog } from "./createDocumentDialog";
@@ -1459,49 +1532,59 @@ export function DocumentsListPage() {
         },
       }),
       columnHelper.display({
-        id: "collaborators",
-        header: "Access",
-        cell: (info) => {
-          const doc = info.row.original;
-          const others = doc.collaborators ?? [];
+              id: "collaborators",
+              header: "Access",
+              cell: (info) => {
+                const doc = info.row.original;
+                const others = doc.collaborators ?? [];
 
-          if (others.length === 0) {
-            return (
-              <Text size="xs" c="dimmed" ta="center">
-                Only you
-              </Text>
-            );
-          }
+                if (others.length === 0) {
+                  return (
+                    <Text size="xs" c="dimmed" ta="center">
+                      Only you
+                    </Text>
+                  );
+                }
 
-          return (
-            <Avatar.Group spacing="sm">
-              {others.slice(0, 4).map((c) => (
-                <Tooltip
-                  key={c.id}
-                  label={`${c.email} · ${c.role === "writer" ? "Can edit" : "Can view"}${
-                    c.status === "pending" ? " (pending)" : ""
-                  }`}
-                >
-                  <Avatar
-                    radius="xl"
-                    size={28}
-                    color={c.status === "pending" ? "gray" : "blue"}
-                    variant={c.status === "pending" ? "light" : "filled"}
-                  >
-                    {c.email.slice(0, 2).toUpperCase()}
-                  </Avatar>
-                </Tooltip>
-              ))}
-              {others.length > 4 && (
-                <Avatar radius="xl" size={28}>
-                  +{others.length - 4}
-                </Avatar>
-              )}
-            </Avatar.Group>
-          );
-        },
-        enableSorting: false,
-      }),
+                return (
+                  <Group gap={6} wrap="nowrap">
+                    {others.slice(0, 4).map((c) => (
+                      <Tooltip
+                        key={c.id}
+                        label={`${c.email} · ${c.role === "writer" ? "Can edit" : "Can view"}${
+                          c.status === "pending" ? " (invitation pending)" : ""
+                        }`}
+                      >
+                        <Indicator
+                          disabled={c.status !== "pending"}
+                          size={14}
+                          color="var(--color-warning)"
+                          offset={3}
+                          position="bottom-end"
+                          label={<IconClock size={9} />}
+                          styles={{ indicator: { padding: 0 } }}
+                        >
+                          <Avatar
+                            radius="xl"
+                            size={28}
+                            color={c.status === "pending" ? "gray" : "blue"}
+                            variant={c.status === "pending" ? "light" : "filled"}
+                          >
+                            {c.email.slice(0, 2).toUpperCase()}
+                          </Avatar>
+                        </Indicator>
+                      </Tooltip>
+                    ))}
+                    {others.length > 4 && (
+                      <Avatar radius="xl" size={28}>
+                        +{others.length - 4}
+                      </Avatar>
+                    )}
+                  </Group>
+                );
+              },
+              enableSorting: false,
+            }),
       columnHelper.accessor("updatedAt", {
         header: "Last Modified",
         cell: (info) => (
@@ -2116,7 +2199,6 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
         opened={collaboratorsDialogOpened}
         onClose={() => setCollaboratorsDialogOpened(false)}
         documentId={documentId}
-        collaborators={document.collaborators}
       />
     </div>
   );
@@ -2137,37 +2219,106 @@ import {
   acceptInvitation,
   declineInvitation,
 } from "../api/redaction";
-import type { CollaboratorRole } from "../types/redaction";
+import type { CollaboratorRole, Collaborator, RedactionDocument } from "../types/redaction";
+
+const docKey = (documentId: string) => ["document", documentId] as const;
 
 export function useInviteCollaborator(documentId: string) {
   const queryClient = useQueryClient();
+  const key = docKey(documentId);
+
   return useMutation({
     mutationFn: ({ email, role }: { email: string; role: CollaboratorRole }) =>
       inviteCollaborator(documentId, email, role),
+
+    onMutate: async ({ email, role }) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<RedactionDocument>(key);
+
+      const optimisticCollaborator: Collaborator = {
+        id: `optimistic-${Date.now()}`,
+        userId: "",
+        email,
+        role,
+        status: "pending",
+      };
+
+      queryClient.setQueryData<RedactionDocument>(key, (old) =>
+        old ? { ...old, collaborators: [...old.collaborators, optimisticCollaborator] } : old
+      );
+
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(key, context.previous);
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["document", documentId] });
       queryClient.invalidateQueries({ queryKey: ["documents"] });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: key });
     },
   });
 }
 
 export function useUpdateCollaboratorRole(documentId: string) {
   const queryClient = useQueryClient();
+  const key = docKey(documentId);
+
   return useMutation({
     mutationFn: ({ collaboratorId, role }: { collaboratorId: string; role: CollaboratorRole }) =>
       updateCollaboratorRole(documentId, collaboratorId, role),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["document", documentId] }),
+
+    onMutate: async ({ collaboratorId, role }) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<RedactionDocument>(key);
+
+      queryClient.setQueryData<RedactionDocument>(key, (old) =>
+        old
+          ? {
+              ...old,
+              collaborators: old.collaborators.map((c) =>
+                c.id === collaboratorId ? { ...c, role } : c
+              ),
+            }
+          : old
+      );
+
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(key, context.previous);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: key }),
   });
 }
 
 export function useRemoveCollaborator(documentId: string) {
   const queryClient = useQueryClient();
+  const key = docKey(documentId);
+
   return useMutation({
     mutationFn: (collaboratorId: string) => removeCollaborator(documentId, collaboratorId),
+
+    onMutate: async (collaboratorId) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<RedactionDocument>(key);
+
+      queryClient.setQueryData<RedactionDocument>(key, (old) =>
+        old
+          ? { ...old, collaborators: old.collaborators.filter((c) => c.id !== collaboratorId) }
+          : old
+      );
+
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(key, context.previous);
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["document", documentId] });
       queryClient.invalidateQueries({ queryKey: ["documents"] });
     },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: key }),
   });
 }
 
@@ -2175,7 +2326,7 @@ export function usePendingInvitations() {
   return useQuery({
     queryKey: ["invitations"],
     queryFn: getPendingInvitations,
-    refetchInterval: 30_000, // poll — there's no push mechanism without email/websockets
+    refetchInterval: 30_000,
   });
 }
 

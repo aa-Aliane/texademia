@@ -8,6 +8,9 @@ features:
 routes:
 	codeweaver -input frontend/src/routes -output routes.md
 
+shared:
+	codeweaver -input frontend/src/shared -output shared.md
+
 backend:
 	codeweaver -input backend -output backend.md
 

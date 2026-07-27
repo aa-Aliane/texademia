@@ -1,14 +1,14 @@
 :root {
-  --color-bg: #fafafa;
+  --color-bg: #fdfdfd;
   --color-surface: #ffffff;
   --color-surface-raised: #ffffff;
-  --color-border: #e5e5e5;
-  --color-text: #18181b;
-  --color-text-secondary: #71717a;
-  --color-text-muted: #a1a1aa;
+  --color-border: #e5e7eb;
+  --color-text: #1a1c1c;
+  --color-text-secondary: #6b7280;
+  --color-text-muted: #9ca3af;
 
-  --color-accent: #6366f1;
-  --color-accent-hover: #4f46e5;
+  --color-accent: #4338ca;
+  --color-accent-hover: #3730a3;
   --color-accent-subtle: #eef2ff;
 
   --color-success: #16a34a;
@@ -16,14 +16,17 @@
   --color-danger: #dc2626;
 
   --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
 
   --font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-family-serif: "Noto Serif", Georgia, serif;
+  --font-family-mono: "JetBrains Mono", "SFMono-Regular", monospace;
 }
 
 html[data-mantine-color-scheme="dark"] {

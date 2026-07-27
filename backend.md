@@ -5393,5 +5393,10 @@ async def list_users(
 async def protected_endpoint(user: User = Depends(current_active_user)):
     return {"message": "Access granted via fastapi-users!", "user_email": user.email}
 
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
 ```
 

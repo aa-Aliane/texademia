@@ -16,15 +16,20 @@ const accent: MantineColorsTuple = [
 
 export const theme = createTheme({
   fontFamily: "var(--font-family)",
+  fontFamilyMonospace: "var(--font-family-mono)",
+  headings: {
+    fontFamily: "var(--font-family-serif)",
+  },
   primaryColor: "accent",
+  primaryShade: { light: 7, dark: 4 },
   colors: {
     accent,
   },
   defaultRadius: "md",
   radius: {
     sm: "6px",
-    md: "10px",
-    lg: "14px",
+    md: "8px",
+    lg: "12px",
   },
   fontSizes: {
     xs: "12px",
