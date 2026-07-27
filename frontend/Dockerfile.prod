@@ -1,16 +1,12 @@
 FROM node:24-alpine AS build
 WORKDIR /app
-<<<<<<< HEAD
 ARG VITE_API_URL=""
 ENV VITE_API_URL=$VITE_API_URL
-=======
->>>>>>> auth
 COPY package*.json ./
 RUN npm ci
 COPY . .
 RUN npm run build
 
-<<<<<<< HEAD
 FROM node:24-alpine
 WORKDIR /app
 COPY --from=build /app/dist ./dist
@@ -20,11 +16,3 @@ COPY --from=build /app/server-entry.mjs ./
 ENV PORT=3000
 EXPOSE 3000
 CMD ["node", "server-entry.mjs"]
-=======
-FROM node:20-alpine
-WORKDIR /app
-COPY --from=build /app/.output ./.output
-ENV PORT=3000
-EXPOSE 3000
-CMD ["node", ".output/server/index.mjs"]
->>>>>>> auth
