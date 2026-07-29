@@ -46,10 +46,13 @@ frontend
 │   │       │   ├── useCollaborators.ts
 │   │       │   ├── useCompileDocument.ts
 │   │       │   ├── useDocuments.ts
+│   │       │   ├── useDocumentSocket.ts
 │   │       │   └── useUpdateDocumentTitle.ts
 │   │       ├── index.ts
 │   │       ├── store
-│   │       │   └── editorStore.ts
+│   │       │   ├── editorStore.ts
+│   │       │   ├── headerStore.ts
+│   │       │   └── redactionStore.ts
 │   │       └── types
 │   │           └── redaction.ts
 │   ├── integrations
@@ -1148,7 +1151,6 @@ export function CreateDocumentDialog({
 
 ```tsx
 // redaction/components/documentHeader.tsx
-import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   Group,
@@ -1184,7 +1186,7 @@ interface DocumentHeaderProps {
   role: string;             // NEW
 }
 
-function EditableTitle({
+export function EditableTitle({
   title,
   onSave,
   isSaving,
@@ -1193,47 +1195,44 @@ function EditableTitle({
   onSave: (title: string) => void;
   isSaving: boolean;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(title);
-
-  useEffect(() => setValue(title), [title]);
-
-  const commit = () => {
-    setEditing(false);
-    const trimmed = value.trim() || "Untitled";
-    if (trimmed !== title) onSave(trimmed);
-    else setValue(title);
+  const commit = (el: HTMLHeadingElement) => {
+    const trimmed = el.textContent?.trim() || "Untitled";
+    if (trimmed !== title) {
+      onSave(trimmed);
+    } else {
+      el.textContent = title; // Reset on no change
+    }
   };
 
-  if (editing) {
-    return (
-      <TextInput
-        value={value}
-        onChange={(e) => setValue(e.currentTarget.value)}
-        onBlur={commit}
+  return (
+    <Group gap={6} wrap="nowrap">
+      <Text
+        fw={600}
+        size="sm"
+        truncate
+        contentEditable
+        suppressContentEditableWarning
+        onBlur={(e) => commit(e.currentTarget)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") commit();
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.currentTarget.blur();
+          }
           if (e.key === "Escape") {
-            setValue(title);
-            setEditing(false);
+            e.currentTarget.textContent = title;
+            e.currentTarget.blur();
           }
         }}
-        autoFocus
-        variant="unstyled"
-        styles={{ input: { fontSize: 16, fontWeight: 600, textAlign: "center" } }}
-      />
-    );
-  }
-
-  return (
-    <Group gap={6} wrap="nowrap" onClick={() => setEditing(true)} style={{ cursor: "text" }}>
-      <Text fw={600} size="sm" truncate>
+        style={{ cursor: "text", outline: "none" }}
+      >
         {title}
       </Text>
       {isSaving && <Loader size="xs" />}
     </Group>
   );
 }
+
+
 
 function CompileStatusIndicator({
   phase,
@@ -2051,27 +2050,68 @@ export function Editor({ value, onChange, lineAuthors }: EditorProps) {
 ## src/features/redaction/components/fileTabs.tsx
 
 ```tsx
-import { Tabs, Group } from "@mantine/core";
-import { IconFileText } from "@tabler/icons-react";
+import { Tabs, Group, Avatar, Tooltip } from "@mantine/core";  // CHANGED: added Avatar, Tooltip
+import { IconFileText, IconAlertTriangle } from "@tabler/icons-react";
 import type { ProjectFile } from "../types/redaction";
 
 export const PREVIEW_TAB_ID = "__preview__";
+export const LOG_TAB_ID = "__log__";
 
 interface FileTabsProps {
   files: ProjectFile[];
   activeTabId: string;
   onSelect: (id: string) => void;
+  hasLog?: boolean;
+  presenceByFile?: Record<string, { connectionId: number; name?: string; email?: string }[]>; // NEW
 }
 
-export function FileTabs({ files, activeTabId, onSelect }: FileTabsProps) {
+// NEW
+const AVATAR_COLORS = ["blue", "grape", "teal", "orange", "pink", "indigo"];
+function colorFor(key: string) {
+  let hash = 0;
+  for (const ch of key) hash = (hash * 31 + ch.charCodeAt(0)) % AVATAR_COLORS.length;
+  return AVATAR_COLORS[hash];
+}
+function initials(label: string) {
+  return label.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
+}
+
+// NEW
+function PresenceStack({ users }: { users?: { connectionId: number; name?: string; email?: string }[] }) {
+  if (!users?.length) return null;
+  return (
+    <Avatar.Group spacing={4} ml={6}>
+      {users.slice(0, 3).map((u) => {
+        const label = u.name ?? u.email ?? "?";
+        return (
+          <Tooltip key={u.connectionId} label={label}>
+            <Avatar size={18} radius="xl" color={colorFor(u.email ?? label)}>
+              {initials(label)}
+            </Avatar>
+          </Tooltip>
+        );
+      })}
+    </Avatar.Group>
+  );
+}
+
+export function FileTabs({ files, activeTabId, onSelect, hasLog, presenceByFile }: FileTabsProps) {
   return (
     <Tabs value={activeTabId} onChange={(id) => id && onSelect(id)}>
       <Tabs.List>
         {files.map((f) => (
           <Tabs.Tab key={f.id} value={f.id}>
-            {f.name}
+            <Group gap={0} wrap="nowrap">
+              {f.name}
+              <PresenceStack users={presenceByFile?.[f.id]} />
+            </Group>
           </Tabs.Tab>
         ))}
+        {hasLog && (
+          <Tabs.Tab value={LOG_TAB_ID} color="red" leftSection={<IconAlertTriangle size={14} />}>
+            Compile Log
+          </Tabs.Tab>
+        )}
         <Tabs.Tab
           value={PREVIEW_TAB_ID}
           ml="auto"
@@ -2185,42 +2225,53 @@ export function PdfPreview({ pdfUrl }: PdfPreviewProps) {
 ## src/features/redaction/components/redactionPage.tsx
 
 ```tsx
-// redaction/components/redactionPage.tsx
-import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Editor } from "./editor";
 import { PdfPreview } from "./pdfPreview";
-import { FileTabs, PREVIEW_TAB_ID } from "./fileTabs";
+import { FileTabs, LOG_TAB_ID, PREVIEW_TAB_ID } from "./fileTabs";
 import { DocumentHeader } from "./documentHeader";
 import { DuplicateDocumentDialog } from "./duplicateDocumentDialog";
-import { CollaboratorsDialog } from "./collaboratorsDialog"; // NEW
+import { CollaboratorsDialog } from "./collaboratorsDialog";
 import { useCompileDocument } from "../hooks/useCompileDocument";
 import { useUpdateDocumentTitle } from "../hooks/useUpdateDocumentTitle";
+import { useDocumentSocket } from "../hooks/useDocumentSocket";
 import { documentQueryOptions, duplicateDocument } from "../api/redaction";
-import type { ProjectFile } from "../types/redaction";
+import { useRedactionStore } from "../store/redactionStore";
 
 interface RedactionPageProps {
   documentId: string;
 }
 
 export function RedactionPage({ documentId }: RedactionPageProps) {
-  const { data: document } = useQuery(documentQueryOptions(documentId));
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  // Initialized from the prefetched document so we don't need a useEffect to
-  // sync local file state. The route loader guarantees `document` exists on
-  // first render; the component remounts when documentId changes.
-  const [files, setFiles] = useState<ProjectFile[]>(() => document!.files);
-  const [activeFileId, setActiveFileId] = useState<string | null>(
-    () => document!.files[0]?.id ?? null
+  // Query Backend State
+  const { data: document } = useQuery(documentQueryOptions(documentId));
+
+  // Store State & Actions
+  const activeTabId = useRedactionStore(
+    (state) => state.activeTabs[documentId] ?? document?.files[0]?.id ?? ""
   );
-  const [activeTabId, setActiveTabId] = useState<string>(
-    () => (document!.pdfUrl ? PREVIEW_TAB_ID : "")
+  const activeFileId = useRedactionStore(
+    (state) => state.activeFiles[documentId] ?? document?.files[0]?.id ?? null
   );
-  const [duplicateDialogOpened, setDuplicateDialogOpened] = useState(false);
-  const [collaboratorsDialogOpened, setCollaboratorsDialogOpened] = useState(false); // NEW
+  const dialogState = useRedactionStore((state) => state.dialogs[documentId]);
+
+  const setActiveTab = useRedactionStore((state) => state.setActiveTab);
+  const setActiveFileId = useRedactionStore((state) => state.setActiveFile);
+  const setDialog = useRedactionStore((state) => state.setDialog);
+
+  // Live sockets & refresh trigger
+  const { presenceByFile, setActiveFile: setSocketActiveFile } = useDocumentSocket(
+    documentId,
+    (event) => {
+      if (event.phase) {
+        queryClient.invalidateQueries({ queryKey: ["document", documentId] });
+      }
+    }
+  );
 
   const {
     compile,
@@ -2230,7 +2281,6 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
     pdfUrl,
     error: compileError,
     log: compileLog,
-    isDone: isCompileSuccess,
   } = useCompileDocument(documentId, document?.pdfUrl ?? null);
 
   const { mutate: saveTitle, isPending: isSavingTitle } = useUpdateDocumentTitle(documentId);
@@ -2239,7 +2289,7 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
     mutationFn: (opts: { template: string; title: string }) =>
       duplicateDocument(documentId, opts),
     onSuccess: (newDoc) => {
-      setDuplicateDialogOpened(false);
+      setDialog(documentId, "duplicate", false);
       queryClient.invalidateQueries({ queryKey: ["documents"] });
       navigate({ to: "/redaction/$documentId", params: { documentId: newDoc.id } });
     },
@@ -2247,28 +2297,31 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
 
   if (!document) return null;
 
-  const dirtyCount = files.reduce((count, file) => {
-    const serverFile = document.files.find((f) => f.id === file.id);
-    return serverFile && file.content === serverFile.content ? count : count + 1;
-  }, 0);
-
-  const currentTabId = activeTabId || activeFileId || "";
-  const activeFile = files.find((f) => f.id === currentTabId);
+  const files = document.files;
+  const currentTabId = activeTabId || activeFileId || files[0]?.id || "";
+  const activeFile = files.find((f) => f.id === currentTabId || f.id === activeFileId);
 
   const updateActiveFileContent = (content: string) => {
-    setFiles((prev) => prev.map((f) => (f.id === activeFileId ? { ...f, content } : f)));
+    queryClient.setQueryData(documentQueryOptions(documentId).queryKey, (oldData) => {
+      if (!oldData) return oldData;
+      return {
+        ...oldData,
+        files: oldData.files.map((f) =>
+          f.id === (activeFileId ?? files[0]?.id) ? { ...f, content } : f
+        ),
+      };
+    });
   };
 
   const handleSelectTab = (id: string) => {
-    setActiveTabId(id);
-    if (id !== PREVIEW_TAB_ID) setActiveFileId(id);
+    setActiveTab(documentId, id);
+    if (id !== PREVIEW_TAB_ID && id !== LOG_TAB_ID) {
+      setActiveFileId(documentId, id);
+      setSocketActiveFile(id);
+    }
   };
 
-  useEffect(() => {
-    if (isCompileSuccess && pdfUrl) {
-      setActiveTabId(PREVIEW_TAB_ID);
-    }
-  }, [isCompileSuccess, pdfUrl]);
+  const hasLog = compilePhase === "error" && !!compileLog;
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
@@ -2284,17 +2337,25 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
         compileLog={compileLog}
         template={document.template}
         pdfUrl={pdfUrl}
-        dirtyCount={dirtyCount}
-        onDuplicateClick={() => setDuplicateDialogOpened(true)}
-        onShareClick={() => setCollaboratorsDialogOpened(true)} // NEW
-        role={document.role}                                    // NEW
+        dirtyCount={0}
+        onDuplicateClick={() => setDialog(documentId, "duplicate", true)}
+        onShareClick={() => setDialog(documentId, "collaborators", true)}
+        role={document.role}
       />
 
-      <FileTabs files={files} activeTabId={currentTabId} onSelect={handleSelectTab} />
+      <FileTabs
+        files={files}
+        activeTabId={currentTabId}
+        onSelect={handleSelectTab}
+        hasLog={hasLog}
+        presenceByFile={presenceByFile}
+      />
 
       <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
         {currentTabId === PREVIEW_TAB_ID ? (
           <PdfPreview pdfUrl={pdfUrl} />
+        ) : currentTabId === LOG_TAB_ID && compileLog ? (
+          <Editor value={compileLog} language="log" onChange={() => {}} readOnly />
         ) : activeFile ? (
           <Editor
             value={activeFile.content}
@@ -2306,18 +2367,17 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
       </div>
 
       <DuplicateDocumentDialog
-        opened={duplicateDialogOpened}
-        onClose={() => setDuplicateDialogOpened(false)}
+        opened={!!dialogState?.duplicate}
+        onClose={() => setDialog(documentId, "duplicate", false)}
         onDuplicate={(opts) => duplicate(opts)}
         isDuplicating={isDuplicating}
         sourceTitle={document.title}
         sourceTemplate={document.template}
       />
 
-      {/* NEW */}
       <CollaboratorsDialog
-        opened={collaboratorsDialogOpened}
-        onClose={() => setCollaboratorsDialogOpened(false)}
+        opened={!!dialogState?.collaborators}
+        onClose={() => setDialog(documentId, "collaborators", false)}
         documentId={documentId}
       />
     </div>
@@ -2475,11 +2535,12 @@ export function useDeclineInvitation() {
 ## src/features/redaction/hooks/useCompileDocument.ts
 
 ```ts
-// redaction/hooks/useCompileDocument.ts
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { startCompileJob, pollCompileStatus } from "../api/redaction";
 import type { ProjectFile } from "../types/redaction";
+import { useRedactionStore } from "../store/redactionStore";
+import { LOG_TAB_ID, PREVIEW_TAB_ID } from "../components/fileTabs";
 
 export type CompilePhase = "idle" | "saving" | "queued" | "running" | "done" | "error";
 
@@ -2502,20 +2563,21 @@ function addCacheBuster(url: string, key: string): string {
   return `${url}${separator}v=${key}`;
 }
 
-export function useCompileDocument(documentId: string, initialPdfUrl: string | null) {
+export function useCompileDocument(
+  documentId: string,
+  initialPdfUrl: string | null,
+  liveRefreshKey: number = 0
+) {
   const queryClient = useQueryClient();
+  const setActiveTab = useRedactionStore((state) => state.setActiveTab);
+
   const [jobId, setJobId] = useState<string | null>(null);
-  // Busts browser/iframe caching for the PDF URL. The mount-time key keeps the
-  // initial preview fresh; each compile uses its job id so recompiles always
-  // reload instead of showing a stale cached PDF.
   const [pdfCacheKey] = useState(() => `${Date.now()}`);
 
   const startMutation = useMutation({
     mutationFn: (files: ProjectFile[]) => startCompileJob(documentId, files),
     onSuccess: (data) => {
       setJobId(data.jobId);
-      // Files were just saved; refresh the server snapshot so the dirty count
-      // drops to zero after a successful recompile.
       queryClient.invalidateQueries({ queryKey: ["document", documentId] });
     },
   });
@@ -2526,9 +2588,22 @@ export function useCompileDocument(documentId: string, initialPdfUrl: string | n
     enabled: !!jobId,
     refetchInterval: (query) => {
       const data = query.state.data;
-      if (data?.status === "done" || data?.status === "error") {
+
+      // Handle side-effects cleanly inside the query callback when the job finishes
+      if (data?.status === "done" && jobId) {
+        setActiveTab(documentId, PREVIEW_TAB_ID);
+        setJobId(null);
         return false;
       }
+
+      if (data?.status === "error" && jobId) {
+        if (data.log) {
+          setActiveTab(documentId, LOG_TAB_ID);
+        }
+        setJobId(null);
+        return false;
+      }
+
       return 800;
     },
   });
@@ -2537,7 +2612,7 @@ export function useCompileDocument(documentId: string, initialPdfUrl: string | n
     if (startMutation.isPending) return "saving";
     if (!pollQuery.data) {
       if (jobId) return "queued";
-      return initialPdfUrl ? "done" : "idle"; // NEW
+      return initialPdfUrl ? "done" : "idle";
     }
     if (pollQuery.data.status === "done") return "done";
     if (pollQuery.data.status === "error") return "error";
@@ -2548,21 +2623,21 @@ export function useCompileDocument(documentId: string, initialPdfUrl: string | n
   const phase = getPhase();
   const progress = pollQuery.data?.percent ?? (startMutation.isPending ? 5 : 0);
   const message = pollQuery.data?.message ?? (startMutation.isPending ? "Saving files..." : "Ready");
+
   const pdfUrl = pollQuery.data?.result?.pdf_url
     ? addCacheBuster(toPublicUrl(pollQuery.data.result.pdf_url), jobId ?? pdfCacheKey)
     : !jobId && initialPdfUrl
-      ? addCacheBuster(initialPdfUrl, pdfCacheKey)
+    ? addCacheBuster(initialPdfUrl, `${pdfCacheKey}-${liveRefreshKey}`)
+    : null;
+
+  const error =
+    pollQuery.data?.status === "error"
+      ? pollQuery.data.error ?? "Compilation failed"
+      : startMutation.isError
+      ? (startMutation.error as Error)?.message ?? "Failed to start compilation"
       : null;
 
-  // DEBUG
-  console.log("[compile] derived pdfUrl", { phase, jobId, pdfUrl });
-
-  const error = pollQuery.data?.status === "error"
-    ? (pollQuery.data.error ?? "Compilation failed")
-    : startMutation.isError
-    ? (startMutation.error as Error)?.message ?? "Failed to start compilation"
-    : null;
-  const log = pollQuery.data?.result?.log ?? null;
+  const log = pollQuery.data?.log ?? pollQuery.data?.result?.log ?? null;
 
   const isActive = phase === "saving" || phase === "queued" || phase === "running";
   const isDone = phase === "done";
@@ -2588,6 +2663,108 @@ export function useCompileDocument(documentId: string, initialPdfUrl: string | n
     jobId,
     pollData: pollQuery.data,
   };
+}
+
+```
+
+
+## src/features/redaction/hooks/useDocumentSocket.ts
+
+```ts
+import { useEffect, useRef, useState } from "react";
+
+interface PresenceUser {
+  fileId: string;
+  name: string;
+  email: string;
+  lastSeen: number;
+}
+
+const PRESENCE_INTERVAL_MS = 4000;
+const STALE_AFTER_MS = 12000;
+
+function resolveWsBase(): string {
+  const httpBase = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+  return httpBase.replace(/^http/, "ws");
+}
+
+function buildPresenceMap(users: Map<string, PresenceUser>) {
+  const map: Record<string, { connectionId: string; name: string; email: string }[]> = {};
+  for (const [userId, u] of users) {
+    (map[u.fileId] ??= []).push({ connectionId: userId, name: u.name, email: u.email });
+  }
+  return map;
+}
+
+export function useDocumentSocket(documentId: string, onCompileUpdate: (event: any) => void) {
+  const [presenceByFile, setPresenceByFile] = useState<Record<string, any[]>>({});
+  const wsRef = useRef<WebSocket | null>(null);
+  const activeFileRef = useRef<string | null>(null);
+  const usersRef = useRef<Map<string, PresenceUser>>(new Map());
+  const onCompileUpdateRef = useRef(onCompileUpdate);
+  onCompileUpdateRef.current = onCompileUpdate;
+
+  useEffect(() => {
+    const url = `${resolveWsBase()}/api/texademia/ws/documents/${documentId}`;
+    console.log("[ws] connecting to", url);
+    const socket = new WebSocket(url);
+    wsRef.current = socket;
+
+    socket.onopen = () => console.log("[ws] open");
+    socket.onclose = (e) => console.log("[ws] closed", e.code, e.reason);
+    socket.onerror = (e) => console.log("[ws] error", e);
+
+    const heartbeat = setInterval(() => {
+      console.log("[ws] readyState:", socket.readyState, "activeFile:", activeFileRef.current);
+      if (socket.readyState === WebSocket.OPEN && activeFileRef.current) {
+        socket.send(JSON.stringify({ type: "presence", fileId: activeFileRef.current }));
+      }
+    }, PRESENCE_INTERVAL_MS);
+
+    const sweep = setInterval(() => {
+      const now = Date.now();
+      let changed = false;
+      for (const [userId, u] of usersRef.current) {
+        if (now - u.lastSeen > STALE_AFTER_MS) {
+          usersRef.current.delete(userId);
+          changed = true;
+        }
+      }
+      if (changed) setPresenceByFile(buildPresenceMap(usersRef.current));
+    }, 3000);
+
+    socket.onmessage = (event) => {
+      console.log("[ws] message received:", event.data);
+      const payload = JSON.parse(event.data);
+      if (payload.type === "presence") {
+        usersRef.current.set(payload.userId, {
+          fileId: payload.fileId,
+          name: payload.name,
+          email: payload.email,
+          lastSeen: Date.now(),
+        });
+        setPresenceByFile(buildPresenceMap(usersRef.current));
+      } else if (payload.type === "compile:update") {
+        onCompileUpdateRef.current(payload);
+      }
+    };
+
+    return () => {
+      console.log("[ws] effect cleanup — closing socket, readyState was", socket.readyState);
+      clearInterval(heartbeat);
+      clearInterval(sweep);
+      socket.close();
+    };
+  }, [documentId]);
+
+  const setActiveFile = (fileId: string) => {
+    activeFileRef.current = fileId;
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "presence", fileId }));
+    }
+  };
+
+  return { presenceByFile, setActiveFile };
 }
 
 ```
@@ -2702,6 +2879,87 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       files: files.map((f) => (f.id === activeFileId ? { ...f, content } : f)),
     });
   },
+}));
+
+```
+
+
+## src/features/redaction/store/headerStore.ts
+
+```ts
+import { create } from "zustand";
+import type { ProjectFile } from "../types/redaction";
+
+interface HeaderState {
+  documentId: string | null;
+  files: ProjectFile[];
+  activeFileId: string | null;
+  loadDocument: (documentId: string, files: ProjectFile[]) => void;
+  setActiveFileId: (id: string) => void;
+  updateActiveFileContent: (content: string) => void;
+}
+
+export const useHeaderStore = create<HeaderState>((set, get) => ({
+  documentId: null,
+  files: [],
+  activeFileId: null,
+  loadDocument: (documentId, files) =>
+    set({
+      documentId,
+      files,
+      activeFileId: files[0]?.id ?? null,
+    }),
+  setActiveFileId: (id) => set({ activeFileId: id }),
+  updateActiveFileContent: (content) => {
+    const { activeFileId, files } = get();
+    set({
+      files: files.map((f) => (f.id === activeFileId ? { ...f, content } : f)),
+    });
+  },
+}));
+
+```
+
+
+## src/features/redaction/store/redactionStore.ts
+
+```ts
+// redaction/stores/useRedactionStore.ts
+import { create } from "zustand";
+
+interface RedactionUIStore {
+  // Keyed by documentId so tab/dialog selections are isolated per document
+  activeTabs: Record<string, string>;
+  activeFiles: Record<string, string>;
+  dialogs: Record<string, { duplicate?: boolean; collaborators?: boolean }>;
+
+  setActiveTab: (documentId: string, tabId: string) => void;
+  setActiveFile: (documentId: string, fileId: string) => void;
+  setDialog: (documentId: string, dialog: "duplicate" | "collaborators", open: boolean) => void;
+}
+
+export const useRedactionStore = create<RedactionUIStore>((set) => ({
+  activeTabs: {},
+  activeFiles: {},
+  dialogs: {},
+
+  setActiveTab: (documentId, tabId) =>
+    set((state) => ({
+      activeTabs: { ...state.activeTabs, [documentId]: tabId },
+    })),
+
+  setActiveFile: (documentId, fileId) =>
+    set((state) => ({
+      activeFiles: { ...state.activeFiles, [documentId]: fileId },
+    })),
+
+  setDialog: (documentId, dialog, open) =>
+    set((state) => ({
+      dialogs: {
+        ...state.dialogs,
+        [documentId]: { ...state.dialogs[documentId], [dialog]: open },
+      },
+    })),
 }));
 
 ```
@@ -3717,3 +3975,4 @@ const config = defineConfig({
 export default config
 
 ```
+
