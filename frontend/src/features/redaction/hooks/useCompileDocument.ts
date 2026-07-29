@@ -72,10 +72,10 @@ export function useCompileDocument(documentId: string, initialPdfUrl: string | n
   const progress = pollQuery.data?.percent ?? (startMutation.isPending ? 5 : 0);
   const message = pollQuery.data?.message ?? (startMutation.isPending ? "Saving files..." : "Ready");
   const pdfUrl = pollQuery.data?.result?.pdf_url
-    ? addCacheBuster(toPublicUrl(pollQuery.data.result.pdf_url), jobId ?? pdfCacheKey)
-    : !jobId && initialPdfUrl
-      ? addCacheBuster(initialPdfUrl, `${pdfCacheKey}-${liveRefreshKey}`) // CHANGED
-      : null;
+      ? addCacheBuster(toPublicUrl(pollQuery.data.result.pdf_url), jobId ?? pdfCacheKey)
+      : !jobId && initialPdfUrl
+        ? addCacheBuster(initialPdfUrl, `${pdfCacheKey}-${liveRefreshKey}`) // CHANGED
+        : null;
 
   // DEBUG
   console.log("[compile] derived pdfUrl", { phase, jobId, pdfUrl });
