@@ -21,6 +21,8 @@ router = APIRouter(tags=["websocket"])
 
 _async_redis: Redis | None = None
 
+PING_INTERVAL_SECONDS = 20
+
 
 def get_async_redis() -> Redis:
     global _async_redis
@@ -84,18 +86,47 @@ async def document_socket(
                 payload = json.loads(raw)
             except json.JSONDecodeError:
                 continue
-            if payload.get("type") == "presence":
+
+            msg_type = payload.get("type")
+
+            if msg_type == "presence":
                 payload["userId"] = str(user.id)
                 payload["name"] = user.first_name or user.email
                 payload["email"] = user.email
                 await redis.publish(channel_name, json.dumps(payload))
 
+            elif msg_type == "cursor":
+                payload["userId"] = str(user.id)
+                payload["name"] = user.first_name or user.email
+                payload["email"] = user.email
+                await redis.publish(channel_name, json.dumps(payload))
+
+            elif msg_type == "pong":
+                # Client's reply to our keepalive ping — nothing to do,
+                # just proves the round trip is alive.
+                pass
+
+    async def send_pings():
+        # App-level keepalive. This matters most during long-running work
+        # elsewhere in the system (e.g. a compile job saturating CPU on a
+        # shared host) — it guarantees outbound traffic on this socket at a
+        # fixed cadence so idle-timeout proxies/load balancers don't reap it,
+        # independent of how busy the rest of the stack is.
+        while True:
+            await asyncio.sleep(PING_INTERVAL_SECONDS)
+            try:
+                await websocket.send_text(json.dumps({"type": "ping"}))
+            except Exception as e:
+                print(f"[ws] ping failed for user={user.email}: {e}")
+                raise
+
     redis_task = asyncio.create_task(relay_from_redis())
     client_task = asyncio.create_task(relay_from_client())
+    ping_task = asyncio.create_task(send_pings())
 
     try:
         done, pending = await asyncio.wait(
-            {redis_task, client_task}, return_when=asyncio.FIRST_COMPLETED
+            {redis_task, client_task, ping_task}, return_when=asyncio.FIRST_COMPLETED
         )
         for task in done:
             if task.exception():
@@ -108,5 +139,6 @@ async def document_socket(
         print(f"[ws] cleaning up: user={user.email} doc={document_id}")
         redis_task.cancel()
         client_task.cancel()
+        ping_task.cancel()
         await pubsub.unsubscribe(channel_name)
         await pubsub.close()
