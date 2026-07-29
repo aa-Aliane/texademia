@@ -17,5 +17,6 @@ jobs:
           script: |
               cd /home/aliane/web/apps/texademia
               git pull origin main
+              docker compose -f docker-compose.prod.yaml down
               docker compose --env-file .env.production -f docker-compose.prod.yaml up -d --build --remove-orphans
               docker exec nginx-proxy nginx -s reload
