@@ -11,6 +11,7 @@ from rq import get_current_job
 
 from src.config.settings import settings
 from src.features.texademia.assets import get_template_asset_files
+from src.features.texademia.services.pubsub import publish_document_event
 
 redis_conn = redis.from_url(settings.REDIS_URL)
 
@@ -60,7 +61,9 @@ def compile_latex_job(document_id: str, files_data: list[dict], template: str) -
     print(
         f"[worker] doc={document_id} template={template} "
         f"files={[(f['name'], len(f['content'])) for f in files_data]} "
-        f"main_snippet={main_file['content'][:200]!r}" if main_file else "no-main"
+        f"main_snippet={main_file['content'][:200]!r}"
+        if main_file
+        else "no-main"
     )
 
     def update_progress(step: str, percent: int, message: str = ""):
@@ -78,6 +81,15 @@ def compile_latex_job(document_id: str, files_data: list[dict], template: str) -
         if job:
             job.meta = {**(job.meta or {}), "log": full_log}
             job.save_meta()
+        publish_document_event(
+            document_id,
+            {
+                "type": "compile:update",
+                "phase": "error",
+                "error": message,
+                "log": full_log,
+            },
+        )
         raise CompileError(message, log=full_log)
 
     update_progress("preparing", 10, "Setting up compilation environment")
@@ -150,6 +162,15 @@ def compile_latex_job(document_id: str, files_data: list[dict], template: str) -
 
     full_log = "\n\n".join(combined_log)
     update_progress("done", 100, "Compilation complete")
+
+    publish_document_event(
+        document_id,
+        {
+            "type": "compile:update",
+            "phase": "done",
+            "pdfUrl": f"/static/compiled/{document_id}.pdf",
+        },
+    )
     return {
         "status": "success",
         "pdf_url": f"/static/compiled/{document_id}.pdf",

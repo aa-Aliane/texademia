@@ -7,9 +7,10 @@ import { PdfPreview } from "./pdfPreview";
 import { FileTabs, LOG_TAB_ID, PREVIEW_TAB_ID } from "./fileTabs";
 import { DocumentHeader } from "./documentHeader";
 import { DuplicateDocumentDialog } from "./duplicateDocumentDialog";
-import { CollaboratorsDialog } from "./collaboratorsDialog"; // NEW
+import { CollaboratorsDialog } from "./collaboratorsDialog";
 import { useCompileDocument } from "../hooks/useCompileDocument";
 import { useUpdateDocumentTitle } from "../hooks/useUpdateDocumentTitle";
+import { useDocumentSocket } from "../hooks/useDocumentSocket"; // CHANGED
 import { documentQueryOptions, duplicateDocument } from "../api/redaction";
 import type { ProjectFile } from "../types/redaction";
 
@@ -22,9 +23,6 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  // Initialized from the prefetched document so we don't need a useEffect to
-  // sync local file state. The route loader guarantees `document` exists on
-  // first render; the component remounts when documentId changes.
   const [files, setFiles] = useState<ProjectFile[]>(() => document!.files);
   const [activeFileId, setActiveFileId] = useState<string | null>(
     () => document!.files[0]?.id ?? null
@@ -33,7 +31,9 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
     () => (document!.pdfUrl ? PREVIEW_TAB_ID : "")
   );
   const [duplicateDialogOpened, setDuplicateDialogOpened] = useState(false);
-  const [collaboratorsDialogOpened, setCollaboratorsDialogOpened] = useState(false); // NEW
+  const [collaboratorsDialogOpened, setCollaboratorsDialogOpened] = useState(false);
+
+  const [liveRefreshKey, setLiveRefreshKey] = useState(0);
 
   const {
     compile,
@@ -44,7 +44,7 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
     error: compileError,
     log: compileLog,
     isDone: isCompileSuccess,
-  } = useCompileDocument(documentId, document?.pdfUrl ?? null);
+  } = useCompileDocument(documentId, document?.pdfUrl ?? null, liveRefreshKey);
 
   const { mutate: saveTitle, isPending: isSavingTitle } = useUpdateDocumentTitle(documentId);
 
@@ -56,6 +56,16 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
       queryClient.invalidateQueries({ queryKey: ["documents"] });
       navigate({ to: "/redaction/$documentId", params: { documentId: newDoc.id } });
     },
+  });
+
+
+
+  // NEW — replaces RoomProvider/useOthers/useEventListener
+  const { presenceByFile, setActiveFile } = useDocumentSocket(documentId, (event) => {
+    if (event.phase) {
+      queryClient.invalidateQueries({ queryKey: ["document", documentId] });
+      setLiveRefreshKey((k) => k + 1);
+    }
   });
 
   if (!document) return null;
@@ -74,7 +84,10 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
 
   const handleSelectTab = (id: string) => {
     setActiveTabId(id);
-    if (id !== PREVIEW_TAB_ID) setActiveFileId(id);
+    if (id !== PREVIEW_TAB_ID) {
+      setActiveFileId(id);
+      setActiveFile(id); // CHANGED — was updateMyPresence({ fileId: id })
+    }
   };
 
   useEffect(() => {
@@ -83,10 +96,7 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
     }
   }, [isCompileSuccess, pdfUrl]);
 
-
   const hasLog = compilePhase === "error" && !!compileLog;
-
-  console.log("HAssss loggg", hasLog, compilePhase, compileLog)
 
   useEffect(() => {
     if (compilePhase === "error" && compileLog) {
@@ -95,7 +105,6 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
   }, [compilePhase, compileLog]);
 
   useEffect(() => {
-    // if a fresh compile starts, don't leave a stale log tab selected
     if (compilePhase === "queued" && activeTabId === LOG_TAB_ID) {
       setActiveTabId(activeFileId ?? "");
     }
@@ -117,25 +126,31 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
         pdfUrl={pdfUrl}
         dirtyCount={dirtyCount}
         onDuplicateClick={() => setDuplicateDialogOpened(true)}
-        onShareClick={() => setCollaboratorsDialogOpened(true)} // NEW
-        role={document.role}                                    // NEW
+        onShareClick={() => setCollaboratorsDialogOpened(true)}
+        role={document.role}
       />
 
-      <FileTabs files={files} activeTabId={currentTabId} onSelect={handleSelectTab} hasLog={hasLog} />
+      <FileTabs
+        files={files}
+        activeTabId={currentTabId}
+        onSelect={handleSelectTab}
+        hasLog={hasLog}
+        presenceByFile={presenceByFile}
+      />
 
       <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
         {currentTabId === PREVIEW_TAB_ID ? (
-            <PdfPreview pdfUrl={pdfUrl} />
-          ) : currentTabId === LOG_TAB_ID && compileLog ? (
-            <Editor value={compileLog} language="log" onChange={() => {}} readOnly />
-          ) : activeFile ? (
-            <Editor
-              value={activeFile.content}
-              language={activeFile.language}
-              onChange={updateActiveFileContent}
-              lineAuthors={activeFile.lineAuthors}
-            />
-          ) : null}
+          <PdfPreview pdfUrl={pdfUrl} />
+        ) : currentTabId === LOG_TAB_ID && compileLog ? (
+          <Editor value={compileLog} language="log" onChange={() => {}} readOnly />
+        ) : activeFile ? (
+          <Editor
+            value={activeFile.content}
+            language={activeFile.language}
+            onChange={updateActiveFileContent}
+            lineAuthors={activeFile.lineAuthors}
+          />
+        ) : null}
       </div>
 
       <DuplicateDocumentDialog
@@ -147,7 +162,6 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
         sourceTemplate={document.template}
       />
 
-      {/* NEW */}
       <CollaboratorsDialog
         opened={collaboratorsDialogOpened}
         onClose={() => setCollaboratorsDialogOpened(false)}

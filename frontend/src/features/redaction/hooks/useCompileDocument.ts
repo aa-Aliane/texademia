@@ -25,7 +25,7 @@ function addCacheBuster(url: string, key: string): string {
   return `${url}${separator}v=${key}`;
 }
 
-export function useCompileDocument(documentId: string, initialPdfUrl: string | null) {
+export function useCompileDocument(documentId: string, initialPdfUrl: string | null, liveRefreshKey: number = 0) {
   const queryClient = useQueryClient();
   const [jobId, setJobId] = useState<string | null>(null);
   // Busts browser/iframe caching for the PDF URL. The mount-time key keeps the
@@ -74,7 +74,7 @@ export function useCompileDocument(documentId: string, initialPdfUrl: string | n
   const pdfUrl = pollQuery.data?.result?.pdf_url
     ? addCacheBuster(toPublicUrl(pollQuery.data.result.pdf_url), jobId ?? pdfCacheKey)
     : !jobId && initialPdfUrl
-      ? addCacheBuster(initialPdfUrl, pdfCacheKey)
+      ? addCacheBuster(initialPdfUrl, `${pdfCacheKey}-${liveRefreshKey}`) // CHANGED
       : null;
 
   // DEBUG
