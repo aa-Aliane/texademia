@@ -6,7 +6,7 @@ import type { ProjectFile, RedactionDocument, Collaborator, CollaboratorRole, In
 interface FileDto {
   id: string;
   name: string;
-  language: "latex" | "bibtex";
+  language: "latex" | "bibtex" | "log";
   content: string;
   line_authors?: { author: string; edited_at: string }[] | null;
 }

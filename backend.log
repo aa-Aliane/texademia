@@ -1,0 +1,50 @@
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/starlette/middleware/cors.py", line 96, in __call__
+texademia_backend  |     await self.simple_response(scope, receive, send, request_headers=headers)
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/starlette/middleware/cors.py", line 154, in simple_response
+texademia_backend  |     await self.app(scope, receive, send)
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+texademia_backend  |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+texademia_backend  |     raise exc
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+texademia_backend  |     await app(scope, receive, sender)
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+texademia_backend  |     await self.app(scope, receive, send)
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/starlette/routing.py", line 660, in __call__
+texademia_backend  |     await self.middleware_stack(scope, receive, send)
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 2685, in app
+texademia_backend  |     await route.handle(scope, receive, send)
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 1766, in handle
+texademia_backend  |     await self.original_router.handle(scope, receive, send)
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 2740, in handle
+texademia_backend  |     await included_router._handle_selected(scope, receive, send)
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 1777, in _handle_selected
+texademia_backend  |     await route.handle(scope, receive, send)
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 1766, in handle
+texademia_backend  |     await self.original_router.handle(scope, receive, send)
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 2740, in handle
+texademia_backend  |     await included_router._handle_selected(scope, receive, send)
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 1786, in _handle_selected
+texademia_backend  |     await original_route.handle(scope, receive, send)
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 1265, in handle
+texademia_backend  |     await app(scope, receive, send)
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 151, in app
+texademia_backend  |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+texademia_backend  |     raise exc
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+texademia_backend  |     await app(scope, receive, sender)
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 137, in app
+texademia_backend  |     response = await f(request)
+texademia_backend  |                ^^^^^^^^^^^^^^^^
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 691, in app
+texademia_backend  |     raw_response = await run_endpoint_function(
+texademia_backend  |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 345, in run_endpoint_function
+texademia_backend  |     return await dependant.call(**values)
+texademia_backend  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+texademia_backend  |   File "/app/src/features/texademia/routers/documents.py", line 195, in create_document
+texademia_backend  |     for name, language, content in get_template_files(doc_in.template):
+texademia_backend  |         ^^^^^^^^^^^^^^^^^^^^^^^
+texademia_backend  | ValueError: too many values to unpack (expected 3)
+texademia_backend  | INFO:     127.0.0.1:37698 - "GET / HTTP/1.1" 200 OK

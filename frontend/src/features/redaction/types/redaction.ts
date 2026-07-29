@@ -7,7 +7,7 @@ export interface LineAuthor {
 export interface ProjectFile {
   id: string;
   name: string;
-  language: "latex" | "bibtex";
+  language: "latex" | "bibtex" | "log";
   content: string;
   lineAuthors?: LineAuthor[];
 }

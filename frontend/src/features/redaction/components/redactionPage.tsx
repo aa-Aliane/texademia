@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Editor } from "./editor";
 import { PdfPreview } from "./pdfPreview";
-import { FileTabs, PREVIEW_TAB_ID } from "./fileTabs";
+import { FileTabs, LOG_TAB_ID, PREVIEW_TAB_ID } from "./fileTabs";
 import { DocumentHeader } from "./documentHeader";
 import { DuplicateDocumentDialog } from "./duplicateDocumentDialog";
 import { CollaboratorsDialog } from "./collaboratorsDialog"; // NEW
@@ -83,6 +83,24 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
     }
   }, [isCompileSuccess, pdfUrl]);
 
+
+  const hasLog = compilePhase === "error" && !!compileLog;
+
+  console.log("HAssss loggg", hasLog, compilePhase, compileLog)
+
+  useEffect(() => {
+    if (compilePhase === "error" && compileLog) {
+      setActiveTabId(LOG_TAB_ID);
+    }
+  }, [compilePhase, compileLog]);
+
+  useEffect(() => {
+    // if a fresh compile starts, don't leave a stale log tab selected
+    if (compilePhase === "queued" && activeTabId === LOG_TAB_ID) {
+      setActiveTabId(activeFileId ?? "");
+    }
+  }, [compilePhase]);
+
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
       <DocumentHeader
@@ -103,19 +121,21 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
         role={document.role}                                    // NEW
       />
 
-      <FileTabs files={files} activeTabId={currentTabId} onSelect={handleSelectTab} />
+      <FileTabs files={files} activeTabId={currentTabId} onSelect={handleSelectTab} hasLog={hasLog} />
 
       <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
         {currentTabId === PREVIEW_TAB_ID ? (
-          <PdfPreview pdfUrl={pdfUrl} />
-        ) : activeFile ? (
-          <Editor
-            value={activeFile.content}
-            language={activeFile.language}
-            onChange={updateActiveFileContent}
-            lineAuthors={activeFile.lineAuthors}
-          />
-        ) : null}
+            <PdfPreview pdfUrl={pdfUrl} />
+          ) : currentTabId === LOG_TAB_ID && compileLog ? (
+            <Editor value={compileLog} language="log" onChange={() => {}} readOnly />
+          ) : activeFile ? (
+            <Editor
+              value={activeFile.content}
+              language={activeFile.language}
+              onChange={updateActiveFileContent}
+              lineAuthors={activeFile.lineAuthors}
+            />
+          ) : null}
       </div>
 
       <DuplicateDocumentDialog

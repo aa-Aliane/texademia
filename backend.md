@@ -109,6 +109,7 @@ DATABASE_URL=postgresql+asyncpg://user:password@db:5432/texademia
 SECRET_KEY=change-this-to-a-long-random-string-in-production
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
+REFRESH_TOKEN_EXPIRE_MINUTES=10080
 REDIS_URL=redis://redis:6379/0
 
 ```
@@ -121,6 +122,7 @@ DATABASE_URL=postgresql+asyncpg://user:password@db:5432/texademia
 SECRET_KEY=change-this-to-a-long-random-string-in-production
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
+REFRESH_TOKEN_EXPIRE_MINUTES=10080
 REDIS_URL=redis://redis:6379/0
 
 ```
@@ -756,6 +758,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_MINUTES: int = 7 * 24 * 60  # 7 days
     REDIS_URL: str = "redis://redis:6379/0"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -891,26 +894,49 @@ async def get_user_manager(user_db=Depends(get_user_db)):
     yield UserManager(user_db)
 
 
-cookie_transport = CookieTransport(
+access_cookie_transport = CookieTransport(
     cookie_name="auth_token",
-    cookie_max_age=3600,
+    cookie_max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     cookie_samesite="lax",
     cookie_secure=os.getenv("ENVIRONMENT") == "production",
     cookie_path="/",
 )
 
+refresh_cookie_transport = CookieTransport(
+    cookie_name="refresh_token",
+    cookie_max_age=settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60,
+    cookie_samesite="lax",
+    cookie_secure=os.getenv("ENVIRONMENT") == "production",
+    cookie_path="/api/auth/jwt",
+)
 
-def get_jwt_strategy() -> JWTStrategy:
+
+def get_access_strategy() -> JWTStrategy:
     return JWTStrategy(
         secret=settings.SECRET_KEY,
         lifetime_seconds=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
 
 
-auth_backend = AuthenticationBackend(
+def get_refresh_strategy() -> JWTStrategy:
+    # Use a different signing key so a refresh token cannot be reused as an
+    # access token even if both cookies are present.
+    return JWTStrategy(
+        secret=f"{settings.SECRET_KEY}:refresh",
+        lifetime_seconds=settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60,
+    )
+
+
+access_backend = AuthenticationBackend(
     name="jwt",
-    transport=cookie_transport,
-    get_strategy=get_jwt_strategy,
+    transport=access_cookie_transport,
+    get_strategy=get_access_strategy,
+)
+
+refresh_backend = AuthenticationBackend(
+    name="jwt-refresh",
+    transport=refresh_cookie_transport,
+    get_strategy=get_refresh_strategy,
 )
 
 ```
@@ -954,18 +980,23 @@ class User(SQLModel, table=True):
 ```py
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_users import FastAPIUsers
-from src.features.auth.manager import auth_backend, get_user_manager
+from src.features.auth.manager import (
+    access_backend,
+    refresh_backend,
+    get_user_manager,
+)
 from src.features.auth.models import User
 from src.features.auth.schemas import UserCreate, UserRead, UserUpdate
 
-fastapi_users = FastAPIUsers[User, uuid.UUID](get_user_manager, [auth_backend])
+fastapi_users = FastAPIUsers[User, uuid.UUID](get_user_manager, [access_backend])
+refresh_fastapi_users = FastAPIUsers[User, uuid.UUID](
+    get_user_manager, [refresh_backend]
+)
 
 router = APIRouter()
-
-# Auto-generates /login and /logout
-router.include_router(fastapi_users.get_auth_router(auth_backend), prefix="/jwt")
 
 # Auto-generates /register
 router.include_router(fastapi_users.get_register_router(UserRead, UserCreate))
@@ -975,7 +1006,82 @@ router.include_router(
     prefix="/users",
 )
 
+# Protected endpoints use the short-lived access token only.
 current_active_user = fastapi_users.current_user(active=True)
+
+# The refresh endpoint uses the long-lived refresh token only.
+refresh_current_user = refresh_fastapi_users.current_user(active=True)
+
+
+def _set_auth_cookie(
+    response: Response,
+    transport,
+    token: str,
+) -> None:
+    response.set_cookie(
+        key=transport.cookie_name,
+        value=token,
+        max_age=transport.cookie_max_age,
+        path=transport.cookie_path,
+        domain=transport.cookie_domain,
+        secure=transport.cookie_secure,
+        httponly=transport.cookie_httponly,
+        samesite=transport.cookie_samesite,
+    )
+
+
+def _clear_auth_cookie(response: Response, transport) -> None:
+    response.delete_cookie(
+        key=transport.cookie_name,
+        path=transport.cookie_path,
+        domain=transport.cookie_domain,
+    )
+
+
+@router.post("/jwt/login")
+async def login(
+    response: Response,
+    credentials: OAuth2PasswordRequestForm = Depends(),
+    user_manager=Depends(get_user_manager),
+):
+    """Authenticate and set both access and refresh cookies."""
+    user = await user_manager.authenticate(credentials)
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="LOGIN_BAD_CREDENTIALS",
+        )
+
+    access_strategy = access_backend.get_strategy()
+    refresh_strategy = refresh_backend.get_strategy()
+
+    access_token = await access_strategy.write_token(user)
+    refresh_token = await refresh_strategy.write_token(user)
+
+    _set_auth_cookie(response, access_backend.transport, access_token)
+    _set_auth_cookie(response, refresh_backend.transport, refresh_token)
+
+    return {"detail": "Login successful"}
+
+
+@router.post("/jwt/logout")
+async def logout(response: Response):
+    """Clear both access and refresh cookies."""
+    _clear_auth_cookie(response, access_backend.transport)
+    _clear_auth_cookie(response, refresh_backend.transport)
+    return {"detail": "Logout successful"}
+
+
+@router.post("/jwt/refresh")
+async def refresh(
+    response: Response,
+    user: User = Depends(refresh_current_user),
+):
+    """Use a valid refresh cookie to issue a new access cookie."""
+    access_strategy = access_backend.get_strategy()
+    access_token = await access_strategy.write_token(user)
+    _set_auth_cookie(response, access_backend.transport, access_token)
+    return {"detail": "Refresh successful"}
 
 ```
 
@@ -3640,7 +3746,7 @@ class DocumentFile(SQLModel, table=True):
         foreign_key="documents.id", nullable=False, index=True
     )
     name: str = Field(nullable=False)  # "main.tex", "references.bib"
-    language: str = Field(default="latex", nullable=False)  # "latex" | "bibtex"
+    language: str = Field(default="latex", nullable=False)  # "latex" | "bibtex" | "log"
     content: str = Field(default="", nullable=False)
     line_authors: list[dict] | None = Field(default=None, sa_column=Column(JSON))
 
@@ -4243,6 +4349,13 @@ async def compile_document(
 ):
     document, _role = await _get_accessible_document(document_id, session, user, require_write=True)
 
+    main_file = next((f for f in document.files if f.name.endswith(".tex")), None)
+    print(
+        f"[compile] doc={document_id} template={document.template} "
+        f"files={[(f.name, len(f.content)) for f in document.files]} "
+        f"main_snippet={main_file.content[:200]!r}" if main_file else "no-main"
+    )
+
     try:
         job_id = enqueue_compile_job(document.id, document.files, document.template)
     except CompilerError as e:
@@ -4687,6 +4800,13 @@ def _run(cmd: list[str], cwd: Path, timeout: int) -> tuple[int, str]:
 def compile_latex_job(document_id: str, files_data: list[dict], template: str) -> dict:
     job = get_current_job()
     combined_log = []
+
+    main_file = next((f for f in files_data if f["name"].endswith(".tex")), None)
+    print(
+        f"[worker] doc={document_id} template={template} "
+        f"files={[(f['name'], len(f['content'])) for f in files_data]} "
+        f"main_snippet={main_file['content'][:200]!r}" if main_file else "no-main"
+    )
 
     def update_progress(step: str, percent: int, message: str = ""):
         if job:
@@ -5399,4 +5519,3 @@ async def health():
     return {"status": "ok"}
 
 ```
-

@@ -85,7 +85,7 @@ export function useCompileDocument(documentId: string, initialPdfUrl: string | n
     : startMutation.isError
     ? (startMutation.error as Error)?.message ?? "Failed to start compilation"
     : null;
-  const log = pollQuery.data?.result?.log ?? null;
+  const log = pollQuery.data?.log ?? pollQuery.data?.result?.log ?? null;
 
   const isActive = phase === "saving" || phase === "queued" || phase === "running";
   const isDone = phase === "done";

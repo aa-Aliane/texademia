@@ -1,57 +1,135 @@
 # Tree View:
 ```
-frontend/src/features
-├── auth
-│   ├── api
-│   │   └── auth.ts
-│   ├── components
-│   │   ├── loginForm.tsx
-│   │   ├── profileForm.tsx
-│   │   ├── registerForm.tsx
-│   │   └── userMenu.tsx
-│   ├── guards
-│   │   └── requireAuth.ts
-│   ├── hooks
-│   │   └── useAuth.ts
-│   ├── index.ts
-│   ├── schemas
-│   │   └── auth.ts
-│   └── types
-│       └── auth.ts
-└── redaction
-    ├── api
-    │   └── redaction.ts
-    ├── components
-    │   ├── blameExtension.ts
-    │   ├── collaboratorsDialog.tsx
-    │   ├── compileButton.tsx
-    │   ├── createDocumentDialog.tsx
-    │   ├── documentHeader.tsx
-    │   ├── documentMenu.tsx
-    │   ├── documentsListPage.module.css
-    │   ├── documentsListPage.tsx
-    │   ├── duplicateDocumentDialog.tsx
-    │   ├── editor.tsx
-    │   ├── fileTabs.tsx
-    │   ├── invitationsBell.tsx
-    │   ├── pdfPreview.tsx
-    │   └── redactionPage.tsx
-    ├── hooks
-    │   ├── useCollaborators.ts
-    │   ├── useCompileDocument.ts
-    │   ├── useDocuments.ts
-    │   └── useUpdateDocumentTitle.ts
-    ├── index.ts
-    ├── store
-    │   └── editorStore.ts
-    └── types
-        └── redaction.ts
+frontend
+├── .env.example
+├── postcss.config.js
+├── public
+│   └── robots.txt
+├── src
+│   ├── features
+│   │   ├── auth
+│   │   │   ├── api
+│   │   │   │   └── auth.ts
+│   │   │   ├── components
+│   │   │   │   ├── loginForm.tsx
+│   │   │   │   ├── profileForm.tsx
+│   │   │   │   ├── registerForm.tsx
+│   │   │   │   └── userMenu.tsx
+│   │   │   ├── guards
+│   │   │   │   └── requireAuth.ts
+│   │   │   ├── hooks
+│   │   │   │   └── useAuth.ts
+│   │   │   ├── index.ts
+│   │   │   ├── schemas
+│   │   │   │   └── auth.ts
+│   │   │   └── types
+│   │   │       └── auth.ts
+│   │   └── redaction
+│   │       ├── api
+│   │       │   └── redaction.ts
+│   │       ├── components
+│   │       │   ├── blameExtension.ts
+│   │       │   ├── collaboratorsDialog.tsx
+│   │       │   ├── compileButton.tsx
+│   │       │   ├── createDocumentDialog.tsx
+│   │       │   ├── documentHeader.tsx
+│   │       │   ├── documentMenu.tsx
+│   │       │   ├── documentsListPage.module.css
+│   │       │   ├── documentsListPage.tsx
+│   │       │   ├── duplicateDocumentDialog.tsx
+│   │       │   ├── editor.tsx
+│   │       │   ├── fileTabs.tsx
+│   │       │   ├── invitationsBell.tsx
+│   │       │   ├── pdfPreview.tsx
+│   │       │   └── redactionPage.tsx
+│   │       ├── hooks
+│   │       │   ├── useCollaborators.ts
+│   │       │   ├── useCompileDocument.ts
+│   │       │   ├── useDocuments.ts
+│   │       │   └── useUpdateDocumentTitle.ts
+│   │       ├── index.ts
+│   │       ├── store
+│   │       │   └── editorStore.ts
+│   │       └── types
+│   │           └── redaction.ts
+│   ├── integrations
+│   │   └── tanstack-query
+│   │       ├── devtools.tsx
+│   │       └── root-provider.tsx
+│   ├── router.tsx
+│   ├── routes
+│   │   ├── __root.tsx
+│   │   ├── index.tsx
+│   │   ├── login.tsx
+│   │   ├── profile.tsx
+│   │   ├── redaction.$documentId.tsx
+│   │   ├── redaction.index.tsx
+│   │   └── register.tsx
+│   ├── routeTree.gen.ts
+│   ├── shared
+│   │   ├── api
+│   │   │   ├── client.ts
+│   │   │   └── serverCookie.ts
+│   │   ├── styles
+│   │   │   ├── animations.module.css
+│   │   │   └── tokens.module.css
+│   │   ├── theme
+│   │   │   └── theme.ts
+│   │   └── ui
+│   │       ├── app-shell
+│   │       │   ├── appShell.tsx
+│   │       │   └── headerPortal.tsx
+│   │       └── card
+│   │           ├── card.module.css
+│   │           └── card.tsx
+│   └── styles.css
+└── vite.config.ts
 
 ```
 
 # Content:
 
-## auth/api/auth.ts
+## .env.example
+
+```example
+INTERNAL_API_URL=http://backend:8000
+
+```
+
+
+## postcss.config.js
+
+```js
+// postcss.config.mjs
+export default {
+  plugins: {
+    'postcss-preset-mantine': {},
+    'postcss-simple-vars': {
+      variables: {
+        'mantine-breakpoint-xs': '36em',
+        'mantine-breakpoint-sm': '48em',
+        'mantine-breakpoint-md': '62em',
+        'mantine-breakpoint-lg': '75em',
+        'mantine-breakpoint-xl': '88em',
+      },
+    },
+  },
+};
+
+```
+
+
+## public/robots.txt
+
+```txt
+# https://www.robotstxt.org/robotstxt.html
+User-agent: *
+Disallow:
+
+```
+
+
+## src/features/auth/api/auth.ts
 
 ```ts
 import { queryOptions } from "@tanstack/react-query";
@@ -139,7 +217,7 @@ export async function register(email: string, password: string): Promise<void> {
 ```
 
 
-## auth/components/loginForm.tsx
+## src/features/auth/components/loginForm.tsx
 
 ```tsx
 import { TextInput, PasswordInput, Button, Stack, Alert, Title, Text, Anchor } from "@mantine/core";
@@ -179,7 +257,7 @@ export function LoginForm() {
 ```
 
 
-## auth/components/profileForm.tsx
+## src/features/auth/components/profileForm.tsx
 
 ```tsx
 import { TextInput, Button, Stack, Alert, Title } from "@mantine/core";
@@ -226,7 +304,7 @@ export function ProfileForm() {
 ```
 
 
-## auth/components/registerForm.tsx
+## src/features/auth/components/registerForm.tsx
 
 ```tsx
 import { TextInput, PasswordInput, Button, Stack, Alert, Title, Text, Anchor } from "@mantine/core";
@@ -274,7 +352,7 @@ export function RegisterForm() {
 ```
 
 
-## auth/components/userMenu.tsx
+## src/features/auth/components/userMenu.tsx
 
 ```tsx
 import { Menu, Avatar, UnstyledButton, Group, Text, Skeleton } from "@mantine/core";
@@ -325,7 +403,7 @@ export function UserMenu() {
 ```
 
 
-## auth/guards/requireAuth.ts
+## src/features/auth/guards/requireAuth.ts
 
 ```ts
 import { redirect } from "@tanstack/react-router";
@@ -348,7 +426,7 @@ export async function requireAuth(queryClient: QueryClient) {
 ```
 
 
-## auth/hooks/useAuth.ts
+## src/features/auth/hooks/useAuth.ts
 
 ```ts
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -401,7 +479,7 @@ export function useLogout() {
 ```
 
 
-## auth/index.ts
+## src/features/auth/index.ts
 
 ```ts
 export { LoginForm } from "./components/loginForm";
@@ -417,7 +495,7 @@ export { useUpdateProfile } from "./hooks/useAuth";
 ```
 
 
-## auth/schemas/auth.ts
+## src/features/auth/schemas/auth.ts
 
 ```ts
 import { z } from "zod";
@@ -446,7 +524,7 @@ export type ProfileInput = z.infer<typeof profileSchema>;
 ```
 
 
-## auth/types/auth.ts
+## src/features/auth/types/auth.ts
 
 ```ts
 export interface User {
@@ -462,7 +540,7 @@ export interface User {
 ```
 
 
-## redaction/api/redaction.ts
+## src/features/redaction/api/redaction.ts
 
 ```ts
 // redaction/api/redaction.ts
@@ -591,11 +669,21 @@ export async function startCompileJob(
   documentId: string,
   files: ProjectFile[]
 ): Promise<CompileJobResponse> {
+  // DEBUG: verify the editor content reaching the compile request
+  const mainFile = files.find((f) => f.name.endsWith(".tex"));
+  console.log("[compile] saving files before compile", {
+    documentId,
+    fileCount: files.length,
+    mainFileName: mainFile?.name,
+    mainContentSnippet: mainFile?.content.slice(0, 200),
+  });
+
   await Promise.all(files.map((f) => saveFile(documentId, f.id, f.content)));
 
   const data = await api.post<{ job_id: string; status: string }>(
     `/api/texademia/documents/${documentId}/compile`
   );
+  console.log("[compile] started job", data);
   return { jobId: data.job_id, status: data.status };
 }
 
@@ -692,7 +780,7 @@ export async function declineInvitation(invitationId: string): Promise<void> {
 ```
 
 
-## redaction/components/blameExtension.ts
+## src/features/redaction/components/blameExtension.ts
 
 ```ts
 import { StateField, StateEffect, type EditorState } from "@codemirror/state";
@@ -772,7 +860,7 @@ export const blameExtension = [lineAuthorsField, blameLinePlugin];
 ```
 
 
-## redaction/components/collaboratorsDialog.tsx
+## src/features/redaction/components/collaboratorsDialog.tsx
 
 ```tsx
 // redaction/components/collaboratorsDialog.tsx
@@ -945,25 +1033,40 @@ export function CollaboratorsDialog({ opened, onClose, documentId }: Collaborato
 ```
 
 
-## redaction/components/compileButton.tsx
+## src/features/redaction/components/compileButton.tsx
 
 ```tsx
 // redaction/components/compileButton.tsx
-import { Button } from "@mantine/core";
+import { Button, Badge } from "@mantine/core";
 import { IconPlayerPlay, IconLoader2 } from "@tabler/icons-react";
 
 interface CompileButtonProps {
   onCompile: () => void;
   isCompiling: boolean;
   hasCompiledBefore: boolean;
+  dirtyCount: number;
 }
 
-export function CompileButton({ onCompile, isCompiling, hasCompiledBefore }: CompileButtonProps) {
+export function CompileButton({
+  onCompile,
+  isCompiling,
+  hasCompiledBefore,
+  dirtyCount,
+}: CompileButtonProps) {
+  const canCompile = !isCompiling && (!hasCompiledBefore || dirtyCount > 0);
+
   return (
     <Button
       onClick={onCompile}
-      disabled={isCompiling}
+      disabled={!canCompile}
       leftSection={isCompiling ? <IconLoader2 size={16} className="spin" /> : <IconPlayerPlay size={16} />}
+      rightSection={
+        dirtyCount > 0 ? (
+          <Badge color="red" size="xs" variant="filled">
+            {dirtyCount}
+          </Badge>
+        ) : undefined
+      }
       color={isCompiling ? "gray" : "blue"}
     >
       {isCompiling ? "Compiling…" : hasCompiledBefore ? "Recompile" : "Compile"}
@@ -974,7 +1077,7 @@ export function CompileButton({ onCompile, isCompiling, hasCompiledBefore }: Com
 ```
 
 
-## redaction/components/createDocumentDialog.tsx
+## src/features/redaction/components/createDocumentDialog.tsx
 
 ```tsx
 import { useState } from "react";
@@ -1041,7 +1144,7 @@ export function CreateDocumentDialog({
 ```
 
 
-## redaction/components/documentHeader.tsx
+## src/features/redaction/components/documentHeader.tsx
 
 ```tsx
 // redaction/components/documentHeader.tsx
@@ -1075,6 +1178,7 @@ interface DocumentHeaderProps {
   compileLog: string | null;
   template: string;
   pdfUrl: string | null;
+  dirtyCount: number;
   onDuplicateClick: () => void;
   onShareClick: () => void; // NEW
   role: string;             // NEW
@@ -1229,6 +1333,7 @@ export function DocumentHeader({
   compileLog,
   template,
   pdfUrl,
+  dirtyCount,
   onDuplicateClick,
   onShareClick, // NEW
   role,         // NEW
@@ -1263,7 +1368,12 @@ export function DocumentHeader({
             onShareClick={onShareClick}
             role={role}
           />
-          <CompileButton onCompile={onCompile} isCompiling={isCompiling} hasCompiledBefore={hasCompiledBefore} />
+          <CompileButton
+            onCompile={onCompile}
+            isCompiling={isCompiling}
+            hasCompiledBefore={hasCompiledBefore}
+            dirtyCount={dirtyCount}
+          />
         </Group>
       </AppShellHeaderPortal>
     </>
@@ -1273,7 +1383,7 @@ export function DocumentHeader({
 ```
 
 
-## redaction/components/documentMenu.tsx
+## src/features/redaction/components/documentMenu.tsx
 
 ```tsx
 // redaction/components/documentMenu.tsx
@@ -1357,7 +1467,7 @@ export function DocumentMenu({ template, pdfUrl, onDuplicateClick, onShareClick,
 ```
 
 
-## redaction/components/documentsListPage.module.css
+## src/features/redaction/components/documentsListPage.module.css
 
 ```css
 .actionsCell {
@@ -1389,7 +1499,7 @@ export function DocumentMenu({ template, pdfUrl, onDuplicateClick, onShareClick,
 ```
 
 
-## redaction/components/documentsListPage.tsx
+## src/features/redaction/components/documentsListPage.tsx
 
 ```tsx
 import { useMemo, useState } from "react";
@@ -1508,13 +1618,13 @@ export function DocumentsListPage() {
               <IconFileText size={18} color="var(--mantine-color-gray-6)" />
               <Stack gap={2}>
                 <Group gap={6} wrap="nowrap">
-                  <Text fw={600} c="blue.9" size="sm">
+                  <Text fw={600} c="accent" size="sm">
                     {doc.title}
                   </Text>
                   {doc.role === "owner" && (
                     <Badge
                       size="xs"
-                      color="blue"
+                      color="accent"
                       variant="filled"
                       leftSection={<IconCrown size={10} />}
                     >
@@ -1567,7 +1677,7 @@ export function DocumentsListPage() {
                           <Avatar
                             radius="xl"
                             size={28}
-                            color={c.status === "pending" ? "gray" : "blue"}
+                            color={c.status === "pending" ? "gray" : "accent"}
                             variant={c.status === "pending" ? "light" : "filled"}
                           >
                             {c.email.slice(0, 2).toUpperCase()}
@@ -1598,7 +1708,7 @@ export function DocumentsListPage() {
         header: "Status",
         cell: (info) =>
           info.getValue() === "compiled" ? (
-            <Badge variant="outline" color="blue" radius="sm" ff="monospace">
+            <Badge variant="outline" color="accent" radius="sm" ff="monospace">
               Compiled
             </Badge>
           ) : (
@@ -1619,7 +1729,7 @@ export function DocumentsListPage() {
                   <Tooltip label="Share">
                     <ActionIcon
                       variant="subtle"
-                      color="blue"
+                      color="accent"
                       onClick={(e) => {
                         e.stopPropagation();
                         setCollaboratorsTarget(doc);
@@ -1632,7 +1742,7 @@ export function DocumentsListPage() {
                 <Tooltip label="Duplicate">
                   <ActionIcon
                     variant="subtle"
-                    color="blue"
+                    color="accent"
                     onClick={(e) => {
                       e.stopPropagation();
                       setDuplicateTarget(doc);
@@ -1644,7 +1754,7 @@ export function DocumentsListPage() {
                 <Tooltip label={doc.pdfUrl ? "Download PDF" : "Compile first"}>
                   <ActionIcon
                     variant="subtle"
-                    color="blue"
+                    color="accent"
                     disabled={!doc.pdfUrl}
                     component="a"
                     href={doc.pdfUrl ?? undefined}
@@ -1704,7 +1814,7 @@ export function DocumentsListPage() {
           <Text ff="monospace" fz={11} c="dimmed" tt="uppercase" style={{ letterSpacing: "0.2em" }}>
             System Storage
           </Text>
-          <Title order={2} c="blue.9">
+          <Title order={2} c="accent">
             Your Library
           </Title>
         </Stack>
@@ -1721,7 +1831,13 @@ export function DocumentsListPage() {
         maw={360}
       />
 
-      <Box style={{ border: "1px solid var(--mantine-color-gray-3)", borderRadius: "var(--mantine-radius-md)" }}>
+      <Box
+        style={{
+          border: "1px solid var(--mantine-color-gray-3)",
+          borderRadius: "var(--mantine-radius-md)",
+          overflow: "hidden",
+        }}
+      >
         <Table withColumnBorders highlightOnHover verticalSpacing="md" horizontalSpacing="lg">
           <Table.Thead bg="gray.0">
             {table.getHeaderGroups().map((headerGroup) => (
@@ -1838,7 +1954,7 @@ export function DocumentsListPage() {
 ```
 
 
-## redaction/components/duplicateDocumentDialog.tsx
+## src/features/redaction/components/duplicateDocumentDialog.tsx
 
 ```tsx
 import { useState } from "react";
@@ -1893,7 +2009,7 @@ export function DuplicateDocumentDialog({
 ```
 
 
-## redaction/components/editor.tsx
+## src/features/redaction/components/editor.tsx
 
 ```tsx
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
@@ -1932,7 +2048,7 @@ export function Editor({ value, onChange, lineAuthors }: EditorProps) {
 ```
 
 
-## redaction/components/fileTabs.tsx
+## src/features/redaction/components/fileTabs.tsx
 
 ```tsx
 import { Tabs, Group } from "@mantine/core";
@@ -1972,7 +2088,7 @@ export function FileTabs({ files, activeTabId, onSelect }: FileTabsProps) {
 ```
 
 
-## redaction/components/invitationsBell.tsx
+## src/features/redaction/components/invitationsBell.tsx
 
 ```tsx
 // redaction/components/invitationsBell.tsx
@@ -2037,7 +2153,7 @@ export function InvitationsBell() {
 ```
 
 
-## redaction/components/pdfPreview.tsx
+## src/features/redaction/components/pdfPreview.tsx
 
 ```tsx
 interface PdfPreviewProps {
@@ -2055,6 +2171,7 @@ export function PdfPreview({ pdfUrl }: PdfPreviewProps) {
 
   return (
     <iframe
+      key={pdfUrl}
       src={pdfUrl}
       title="PDF Preview"
       style={{ width: "100%", height: "100%", border: "1px solid #ccc" }}
@@ -2065,7 +2182,7 @@ export function PdfPreview({ pdfUrl }: PdfPreviewProps) {
 ```
 
 
-## redaction/components/redactionPage.tsx
+## src/features/redaction/components/redactionPage.tsx
 
 ```tsx
 // redaction/components/redactionPage.tsx
@@ -2092,9 +2209,16 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [files, setFiles] = useState<ProjectFile[]>([]);
-  const [activeFileId, setActiveFileId] = useState<string | null>(null);
-  const [activeTabId, setActiveTabId] = useState<string>("");
+  // Initialized from the prefetched document so we don't need a useEffect to
+  // sync local file state. The route loader guarantees `document` exists on
+  // first render; the component remounts when documentId changes.
+  const [files, setFiles] = useState<ProjectFile[]>(() => document!.files);
+  const [activeFileId, setActiveFileId] = useState<string | null>(
+    () => document!.files[0]?.id ?? null
+  );
+  const [activeTabId, setActiveTabId] = useState<string>(
+    () => (document!.pdfUrl ? PREVIEW_TAB_ID : "")
+  );
   const [duplicateDialogOpened, setDuplicateDialogOpened] = useState(false);
   const [collaboratorsDialogOpened, setCollaboratorsDialogOpened] = useState(false); // NEW
 
@@ -2121,17 +2245,12 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
     },
   });
 
-  useEffect(() => {
-    if (document?.files) {
-      setFiles(document.files);
-      if (!activeFileId) {
-        setActiveFileId(document.files[0]?.id ?? null);
-        if (document.pdfUrl && !activeTabId) setActiveTabId(PREVIEW_TAB_ID);
-      }
-    }
-  }, [document]);
-
   if (!document) return null;
+
+  const dirtyCount = files.reduce((count, file) => {
+    const serverFile = document.files.find((f) => f.id === file.id);
+    return serverFile && file.content === serverFile.content ? count : count + 1;
+  }, 0);
 
   const currentTabId = activeTabId || activeFileId || "";
   const activeFile = files.find((f) => f.id === currentTabId);
@@ -2165,6 +2284,7 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
         compileLog={compileLog}
         template={document.template}
         pdfUrl={pdfUrl}
+        dirtyCount={dirtyCount}
         onDuplicateClick={() => setDuplicateDialogOpened(true)}
         onShareClick={() => setCollaboratorsDialogOpened(true)} // NEW
         role={document.role}                                    // NEW
@@ -2207,7 +2327,7 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
 ```
 
 
-## redaction/hooks/useCollaborators.ts
+## src/features/redaction/hooks/useCollaborators.ts
 
 ```ts
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -2352,7 +2472,7 @@ export function useDeclineInvitation() {
 ```
 
 
-## redaction/hooks/useCompileDocument.ts
+## src/features/redaction/hooks/useCompileDocument.ts
 
 ```ts
 // redaction/hooks/useCompileDocument.ts
@@ -2377,14 +2497,26 @@ function toPublicUrl(path: string): string {
   return `${import.meta.env.VITE_API_URL ?? ""}${path}`;
 }
 
+function addCacheBuster(url: string, key: string): string {
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}v=${key}`;
+}
+
 export function useCompileDocument(documentId: string, initialPdfUrl: string | null) {
   const queryClient = useQueryClient();
   const [jobId, setJobId] = useState<string | null>(null);
+  // Busts browser/iframe caching for the PDF URL. The mount-time key keeps the
+  // initial preview fresh; each compile uses its job id so recompiles always
+  // reload instead of showing a stale cached PDF.
+  const [pdfCacheKey] = useState(() => `${Date.now()}`);
 
   const startMutation = useMutation({
     mutationFn: (files: ProjectFile[]) => startCompileJob(documentId, files),
     onSuccess: (data) => {
       setJobId(data.jobId);
+      // Files were just saved; refresh the server snapshot so the dirty count
+      // drops to zero after a successful recompile.
+      queryClient.invalidateQueries({ queryKey: ["document", documentId] });
     },
   });
 
@@ -2417,8 +2549,14 @@ export function useCompileDocument(documentId: string, initialPdfUrl: string | n
   const progress = pollQuery.data?.percent ?? (startMutation.isPending ? 5 : 0);
   const message = pollQuery.data?.message ?? (startMutation.isPending ? "Saving files..." : "Ready");
   const pdfUrl = pollQuery.data?.result?.pdf_url
-    ? toPublicUrl(pollQuery.data.result.pdf_url)
-    : (!jobId ? initialPdfUrl : null);
+    ? addCacheBuster(toPublicUrl(pollQuery.data.result.pdf_url), jobId ?? pdfCacheKey)
+    : !jobId && initialPdfUrl
+      ? addCacheBuster(initialPdfUrl, pdfCacheKey)
+      : null;
+
+  // DEBUG
+  console.log("[compile] derived pdfUrl", { phase, jobId, pdfUrl });
+
   const error = pollQuery.data?.status === "error"
     ? (pollQuery.data.error ?? "Compilation failed")
     : startMutation.isError
@@ -2455,7 +2593,7 @@ export function useCompileDocument(documentId: string, initialPdfUrl: string | n
 ```
 
 
-## redaction/hooks/useDocuments.ts
+## src/features/redaction/hooks/useDocuments.ts
 
 ```ts
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -2490,7 +2628,7 @@ export function useDeleteDocument() {
 ```
 
 
-## redaction/hooks/useUpdateDocumentTitle.ts
+## src/features/redaction/hooks/useUpdateDocumentTitle.ts
 
 ```ts
 // redaction/hooks/useUpdateDocumentTitle.ts
@@ -2511,7 +2649,7 @@ export function useUpdateDocumentTitle(documentId: string) {
 ```
 
 
-## redaction/index.ts
+## src/features/redaction/index.ts
 
 ```ts
 // redaction/index.ts
@@ -2532,7 +2670,7 @@ export {
 ```
 
 
-## redaction/store/editorStore.ts
+## src/features/redaction/store/editorStore.ts
 
 ```ts
 import { create } from "zustand";
@@ -2569,7 +2707,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 ```
 
 
-## redaction/types/redaction.ts
+## src/features/redaction/types/redaction.ts
 
 ```ts
 export interface LineAuthor {
@@ -2635,5 +2773,947 @@ export interface Invitation {
   role: CollaboratorRole;
   invitedByEmail: string;
 }
+
+```
+
+
+## src/integrations/tanstack-query/devtools.tsx
+
+```tsx
+import { ReactQueryDevtoolsPanel } from '@tanstack/react-query-devtools'
+
+export default {
+  name: 'Tanstack Query',
+  render: <ReactQueryDevtoolsPanel />,
+}
+
+```
+
+
+## src/integrations/tanstack-query/root-provider.tsx
+
+```tsx
+import { QueryClient } from '@tanstack/react-query'
+
+export function getContext() {
+  const queryClient = new QueryClient()
+
+  return {
+    queryClient,
+  }
+}
+export default function TanstackQueryProvider() {}
+
+```
+
+
+## src/routeTree.gen.ts
+
+```ts
+/* eslint-disable */
+
+// @ts-nocheck
+
+// noinspection JSUnusedGlobalSymbols
+
+// This file was automatically generated by TanStack Router.
+// You should NOT make any changes in this file as it will be overwritten.
+// Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
+
+import { Route as rootRouteImport } from './routes/__root'
+import { Route as IndexRouteImport } from './routes/index'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as RegisterRouteImport } from './routes/register'
+import { Route as RedactionIndexRouteImport } from './routes/redaction.index'
+import { Route as RedactionDocumentIdRouteImport } from './routes/redaction.$documentId'
+
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RedactionIndexRoute = RedactionIndexRouteImport.update({
+  id: '/redaction/',
+  path: '/redaction/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RedactionDocumentIdRoute = RedactionDocumentIdRouteImport.update({
+  id: '/redaction/$documentId',
+  path: '/redaction/$documentId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+
+export interface FileRoutesByFullPath {
+  '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/profile': typeof ProfileRoute
+  '/register': typeof RegisterRoute
+  '/redaction/$documentId': typeof RedactionDocumentIdRoute
+  '/redaction/': typeof RedactionIndexRoute
+}
+export interface FileRoutesByTo {
+  '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/profile': typeof ProfileRoute
+  '/register': typeof RegisterRoute
+  '/redaction/$documentId': typeof RedactionDocumentIdRoute
+  '/redaction': typeof RedactionIndexRoute
+}
+export interface FileRoutesById {
+  __root__: typeof rootRouteImport
+  '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/profile': typeof ProfileRoute
+  '/register': typeof RegisterRoute
+  '/redaction/$documentId': typeof RedactionDocumentIdRoute
+  '/redaction/': typeof RedactionIndexRoute
+}
+export interface FileRouteTypes {
+  fileRoutesByFullPath: FileRoutesByFullPath
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/profile'
+    | '/register'
+    | '/redaction/$documentId'
+    | '/redaction/'
+  fileRoutesByTo: FileRoutesByTo
+  to:
+    | '/'
+    | '/login'
+    | '/profile'
+    | '/register'
+    | '/redaction/$documentId'
+    | '/redaction'
+  id:
+    | '__root__'
+    | '/'
+    | '/login'
+    | '/profile'
+    | '/register'
+    | '/redaction/$documentId'
+    | '/redaction/'
+  fileRoutesById: FileRoutesById
+}
+export interface RootRouteChildren {
+  IndexRoute: typeof IndexRoute
+  LoginRoute: typeof LoginRoute
+  ProfileRoute: typeof ProfileRoute
+  RegisterRoute: typeof RegisterRoute
+  RedactionDocumentIdRoute: typeof RedactionDocumentIdRoute
+  RedactionIndexRoute: typeof RedactionIndexRoute
+}
+
+declare module '@tanstack/react-router' {
+  interface FileRoutesByPath {
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/redaction/': {
+      id: '/redaction/'
+      path: '/redaction'
+      fullPath: '/redaction/'
+      preLoaderRoute: typeof RedactionIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/redaction/$documentId': {
+      id: '/redaction/$documentId'
+      path: '/redaction/$documentId'
+      fullPath: '/redaction/$documentId'
+      preLoaderRoute: typeof RedactionDocumentIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+  }
+}
+
+const rootRouteChildren: RootRouteChildren = {
+  IndexRoute: IndexRoute,
+  LoginRoute: LoginRoute,
+  ProfileRoute: ProfileRoute,
+  RegisterRoute: RegisterRoute,
+  RedactionDocumentIdRoute: RedactionDocumentIdRoute,
+  RedactionIndexRoute: RedactionIndexRoute,
+}
+export const routeTree = rootRouteImport
+  ._addFileChildren(rootRouteChildren)
+  ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
+
+```
+
+
+## src/router.tsx
+
+```tsx
+import { createRouter as createTanStackRouter } from '@tanstack/react-router'
+import { routeTree } from './routeTree.gen'
+
+import type { ReactNode } from 'react'
+import { QueryClient } from '@tanstack/react-query'
+import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query'
+import TanstackQueryProvider, {
+  getContext,
+} from './integrations/tanstack-query/root-provider'
+
+export function getRouter() {
+  const context = getContext()
+
+  const router = createTanStackRouter({
+    routeTree,
+    context,
+    scrollRestoration: true,
+    defaultPreload: 'intent',
+    defaultPreloadStaleTime: 0,
+  })
+
+  setupRouterSsrQueryIntegration({ router, queryClient: context.queryClient })
+
+  return router
+}
+
+declare module '@tanstack/react-router' {
+  interface Register {
+    router: ReturnType<typeof getRouter>
+  }
+}
+
+```
+
+
+## src/routes/__root.tsx
+
+```tsx
+import {
+  HeadContent,
+  Scripts,
+  createRootRouteWithContext,
+} from '@tanstack/react-router'
+import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
+import { TanStackDevtools } from '@tanstack/react-devtools'
+import {
+  ColorSchemeScript,
+  MantineProvider,
+  mantineHtmlProps,
+} from '@mantine/core'
+import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
+import { theme } from '#/shared/theme/theme'
+import mantineCss from '@mantine/core/styles.css?url'
+import appCss from '../styles.css?url'
+import type { QueryClient } from '@tanstack/react-query'
+import { AppShell } from '#/shared/ui/app-shell/appShell'
+
+interface MyRouterContext {
+  queryClient: QueryClient
+}
+
+export const Route = createRootRouteWithContext<MyRouterContext>()({
+  head: () => ({
+    meta: [
+      {
+        charSet: 'utf-8',
+      },
+      {
+        name: 'viewport',
+        content: 'width=device-width, initial-scale=1',
+      },
+      {
+        title: 'Texademia',
+      },
+    ],
+    links: [
+      {
+        rel: 'stylesheet',
+        href: mantineCss,
+      },
+      {
+        rel: 'stylesheet',
+        href: appCss,
+      },
+    ],
+  }),
+  shellComponent: RootDocument,
+})
+
+function RootDocument({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en" {...mantineHtmlProps}>
+      <head>
+        <HeadContent />
+        <ColorSchemeScript defaultColorScheme="light" />
+      </head>
+      <body>
+        <MantineProvider theme={theme} defaultColorScheme="light">
+          <AppShell>{children}</AppShell>
+        </MantineProvider>
+        <TanStackDevtools
+          config={{
+            position: 'bottom-right',
+          }}
+          plugins={[
+            {
+              name: 'Tanstack Router',
+              render: <TanStackRouterDevtoolsPanel />,
+            },
+            TanStackQueryDevtools,
+          ]}
+        />
+        <Scripts />
+      </body>
+    </html>
+  )
+}
+
+```
+
+
+## src/routes/index.tsx
+
+```tsx
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { ApiError } from "#/shared/api/client";
+import { currentUserQueryOptions } from "#/features/auth";
+import { getCookieHeader } from "#/shared/api/serverCookie";
+
+export const Route = createFileRoute("/")({
+  beforeLoad: async ({ context: { queryClient } }) => {
+    try {
+      await queryClient.ensureQueryData(currentUserQueryOptions(getCookieHeader()));
+      throw redirect({ to: "/redaction" });
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        throw redirect({ to: "/login" });
+      }
+      throw err; // real errors (network, 500...) and the redirect() above both fall through here
+    }
+  },
+});
+
+```
+
+
+## src/routes/login.tsx
+
+```tsx
+import { createFileRoute } from "@tanstack/react-router";
+import { LoginForm } from "#/features/auth";
+
+export const Route = createFileRoute("/login")({ component: LoginForm });
+
+```
+
+
+## src/routes/profile.tsx
+
+```tsx
+import { createFileRoute } from "@tanstack/react-router";
+import { ProfileForm, requireAuth } from "#/features/auth";
+
+export const Route = createFileRoute("/profile")({
+  beforeLoad: ({ context: { queryClient } }) => requireAuth(queryClient),
+  component: ProfileForm,
+});
+
+```
+
+
+## src/routes/redaction.$documentId.tsx
+
+```tsx
+import { createFileRoute } from "@tanstack/react-router";
+import { documentQueryOptions } from "#/features/redaction";
+import { RedactionPage } from "#/features/redaction";
+import { requireAuth } from "#/features/auth";
+import { getCookieHeader } from "#/shared/api/serverCookie";
+
+export const Route = createFileRoute("/redaction/$documentId")({
+  beforeLoad: ({ context: { queryClient } }) => requireAuth(queryClient),
+  loader: ({ context: { queryClient }, params: { documentId } }) =>
+    queryClient.ensureQueryData(documentQueryOptions(documentId, getCookieHeader())),
+  component: () => {
+    const { documentId } = Route.useParams();
+    return <RedactionPage key={documentId} documentId={documentId} />;
+  },
+});
+
+```
+
+
+## src/routes/redaction.index.tsx
+
+```tsx
+import { createFileRoute } from "@tanstack/react-router";
+import { documentsQueryOptions, DocumentsListPage } from "#/features/redaction";
+import { requireAuth } from "#/features/auth";
+import { getCookieHeader } from "#/shared/api/serverCookie";
+
+export const Route = createFileRoute("/redaction/")({
+  beforeLoad: ({ context: { queryClient } }) => requireAuth(queryClient),
+  loader: ({ context: { queryClient } }) =>
+      queryClient.ensureQueryData(documentsQueryOptions(getCookieHeader())),
+  component: DocumentsListPage,
+});
+
+```
+
+
+## src/routes/register.tsx
+
+```tsx
+import { createFileRoute } from "@tanstack/react-router";
+import { RegisterForm } from "#/features/auth";
+
+export const Route = createFileRoute("/register")({ component: RegisterForm });
+
+```
+
+
+## src/shared/api/client.ts
+
+```ts
+export class ApiError extends Error {
+  status: number;
+  body: unknown;
+
+  constructor(message: string, status: number, body: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
+// SSR (inside the frontend container) must reach the backend via Docker's
+// internal service name. Client-side (browser) must use localhost, since
+// that's what's actually published to your host machine.
+function resolveBaseUrl(): string {
+  if (typeof window === "undefined") {
+    return process.env.INTERNAL_API_URL ?? "http://backend:8000";
+  }
+  return import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+}
+
+interface RequestOptions extends RequestInit {
+  // Pass through the incoming request's Cookie header during SSR,
+  // since server-side fetch doesn't have access to the browser's cookie jar.
+  cookieHeader?: string | null;
+}
+
+let refreshPromise: Promise<void> | null = null;
+
+async function refreshAccessToken(): Promise<void> {
+  if (refreshPromise) return refreshPromise;
+
+  const baseUrl = resolveBaseUrl();
+  refreshPromise = fetch(`${baseUrl}/api/auth/jwt/refresh`, {
+    method: "POST",
+    credentials: "include",
+  })
+    .then((res) => {
+      if (!res.ok) {
+        throw new ApiError("Refresh failed", res.status, null);
+      }
+    })
+    .finally(() => {
+      refreshPromise = null;
+    });
+
+  return refreshPromise;
+}
+
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const { cookieHeader, headers, ...rest } = options;
+  const baseUrl = resolveBaseUrl();
+
+  const doFetch = () =>
+    fetch(`${baseUrl}${path}`, {
+      ...rest,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+        ...headers,
+      },
+    });
+
+  let res = await doFetch();
+
+  // On the client, if the access token expired, try to refresh it once and
+  // retry the original request. We can't refresh during SSR because there is
+  // no browser cookie jar there.
+  if (
+    res.status === 401 &&
+    typeof window !== "undefined" &&
+    path !== "/api/auth/jwt/refresh"
+  ) {
+    try {
+      await refreshAccessToken();
+      res = await doFetch();
+    } catch {
+      // Refresh failed; keep the original 401 response so the caller can
+      // redirect to login or surface the error.
+    }
+  }
+
+  if (!res.ok) {
+    let body: unknown = null;
+    try {
+      body = await res.json();
+    } catch {
+      // non-JSON error body, ignore
+    }
+    const message =
+      (body as any)?.detail?.message ?? (body as any)?.detail ?? `Request failed: ${res.status}`;
+    throw new ApiError(message, res.status, body);
+  }
+
+  if (res.status === 204) return undefined as T;
+  return res.json() as Promise<T>;
+}
+
+export const api = {
+  get: <T>(path: string, options?: RequestOptions) =>
+    request<T>(path, { ...options, method: "GET" }),
+  post: <T>(path: string, body?: unknown, options?: RequestOptions) =>
+    request<T>(path, { ...options, method: "POST", body: body ? JSON.stringify(body) : undefined }),
+  patch: <T>(path: string, body?: unknown, options?: RequestOptions) =>
+    request<T>(path, { ...options, method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
+  delete: <T>(path: string, options?: RequestOptions) =>
+    request<T>(path, { ...options, method: "DELETE" }),
+};
+
+// The PDF URL the backend returns is host-relative and only makes sense
+// from the browser's perspective — use this whenever you render one.
+export function toPublicUrl(path: string): string {
+  const publicBase = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+  return `${publicBase}${path}`;
+}
+
+```
+
+
+## src/shared/api/serverCookie.ts
+
+```ts
+import { createIsomorphicFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
+
+export const getCookieHeader = createIsomorphicFn()
+  .server(() => getRequest()?.headers.get("cookie") ?? null)
+  .client(() => null);
+
+```
+
+
+## src/shared/styles/animations.module.css
+
+```css
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+```
+
+
+## src/shared/styles/tokens.module.css
+
+```css
+:root {
+  --color-bg: #fdfdfd;
+  --color-surface: #ffffff;
+  --color-surface-raised: #ffffff;
+  --color-border: #e5e7eb;
+  --color-text: #1a1c1c;
+  --color-text-secondary: #6b7280;
+  --color-text-muted: #9ca3af;
+
+  --color-accent: #4338ca;
+  --color-accent-hover: #3730a3;
+  --color-accent-subtle: #eef2ff;
+
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+
+  --font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-family-serif: "Noto Serif", Georgia, serif;
+  --font-family-mono: "JetBrains Mono", "SFMono-Regular", monospace;
+}
+
+html[data-mantine-color-scheme="dark"] {
+  --color-bg: #0a0a0a;
+  --color-surface: #18181b;
+  --color-surface-raised: #1f1f23;
+  --color-border: #27272a;
+  --color-text: #fafafa;
+  --color-text-secondary: #a1a1aa;
+  --color-text-muted: #71717a;
+
+  --color-accent: #818cf8;
+  --color-accent-hover: #6366f1;
+  --color-accent-subtle: #1e1b4b;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+```
+
+
+## src/shared/theme/theme.ts
+
+```ts
+import { createTheme } from "@mantine/core";
+import type { MantineColorsTuple } from "@mantine/core";
+
+const accent: MantineColorsTuple = [
+  "#eef2ff",
+  "#e0e7ff",
+  "#c7d2fe",
+  "#a5b4fc",
+  "#818cf8",
+  "#6366f1",
+  "#4f46e5",
+  "#4338ca",
+  "#3730a3",
+  "#312e81",
+];
+
+export const theme = createTheme({
+  fontFamily: "var(--font-family)",
+  fontFamilyMonospace: "var(--font-family-mono)",
+  headings: {
+    fontFamily: "var(--font-family-serif)",
+  },
+  primaryColor: "accent",
+  primaryShade: { light: 7, dark: 4 },
+  colors: {
+    accent,
+  },
+  defaultRadius: "md",
+  radius: {
+    sm: "6px",
+    md: "8px",
+    lg: "12px",
+  },
+  fontSizes: {
+    xs: "12px",
+    sm: "13px",
+    md: "14px",
+    lg: "16px",
+    xl: "18px",
+  },
+  shadows: {
+    sm: "var(--shadow-sm)",
+    md: "var(--shadow-md)",
+    lg: "var(--shadow-lg)",
+  },
+
+  components: {
+    Button: {
+      defaultProps: { size: "sm" },
+      styles: {
+        root: {
+          fontWeight: 500,
+          transition: "background-color 0.15s ease, transform 0.05s ease",
+          "&:active": {
+            transform: "scale(0.98)",
+          },
+        },
+      },
+    },
+
+    TextInput: {
+      defaultProps: { size: "sm" },
+      styles: {
+        input: {
+          border: "1px solid var(--color-border)",
+          backgroundColor: "var(--color-surface)",
+          color: "var(--color-text)",
+          "&:focus": {
+            borderColor: "var(--color-accent)",
+            outline: "none",
+          },
+        },
+        label: {
+          color: "var(--color-text)",
+          fontWeight: 500,
+          marginBottom: "4px",
+        },
+      },
+    },
+
+    Select: {
+      defaultProps: { size: "sm" },
+      styles: {
+        input: {
+          border: "1px solid var(--color-border)",
+          backgroundColor: "var(--color-surface)",
+          color: "var(--color-text)",
+        },
+        dropdown: {
+          border: "1px solid var(--color-border)",
+          backgroundColor: "var(--color-surface)",
+          boxShadow: "var(--shadow-md)",
+        },
+      },
+    },
+
+    Card: {
+      defaultProps: { padding: "lg", radius: "md" },
+      styles: {
+        root: {
+          backgroundColor: "var(--color-surface)",
+          border: "1px solid var(--color-border)",
+          boxShadow: "var(--shadow-sm)",
+        },
+      },
+    },
+  },
+});
+
+```
+
+
+## src/shared/ui/app-shell/appShell.tsx
+
+```tsx
+import { AppShell as MantineAppShell, Text } from "@mantine/core";
+import { Link } from "@tanstack/react-router";
+import { UserMenu } from "#/features/auth";
+import { InvitationsBell } from "#/features/redaction"; // NEW
+
+interface AppShellProps {
+  children: React.ReactNode;
+}
+export function AppShell({ children }: AppShellProps) {
+  return (
+    <MantineAppShell
+      header={{ height: 56 }}
+      padding={0}
+      styles={{
+        main: {
+          backgroundColor: "var(--color-bg)",
+          height: "calc(100dvh - 56px)",
+          overflow: "hidden",
+        },
+        header: {
+          backgroundColor: "var(--color-surface)",
+          borderBottom: "1px solid var(--color-border)",
+        },
+      }}
+    >
+      <MantineAppShell.Header>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr auto 1fr",
+            alignItems: "center",
+            height: "100%",
+            paddingInline: "var(--mantine-spacing-lg)",
+          }}
+        >
+          <div style={{ justifySelf: "start", minWidth: 0 }}>
+            <Text component={Link} to="/" fw={700} size="md" c="var(--color-text)" style={{ textDecoration: "none" }}>
+              Texademia
+            </Text>
+          </div>
+          <div id="app-shell-header-center" style={{ justifySelf: "center", minWidth: 0 }} />
+          <div
+            style={{
+              justifySelf: "end",
+              minWidth: 0,
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--mantine-spacing-md)",
+            }}
+          >
+            <div id="app-shell-header-actions" />
+            <InvitationsBell />
+            <UserMenu />
+          </div>
+        </div>
+      </MantineAppShell.Header>
+      <MantineAppShell.Main>{children}</MantineAppShell.Main>
+    </MantineAppShell>
+  );
+}
+
+```
+
+
+## src/shared/ui/app-shell/headerPortal.tsx
+
+```tsx
+// shared/ui/app-shell/headerPortal.tsx
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+
+type HeaderSlot = "center" | "actions";
+
+const SLOT_IDS: Record<HeaderSlot, string> = {
+  center: "app-shell-header-center",
+  actions: "app-shell-header-actions",
+};
+
+export function AppShellHeaderPortal({
+  slot,
+  children,
+}: {
+  slot: HeaderSlot;
+  children: React.ReactNode;
+}) {
+  const [target, setTarget] = useState<Element | null>(null);
+
+  // AppShell renders before route content, so the slot div exists by the
+  // time this mounts — but we still wait for a real DOM node (client-only).
+  useEffect(() => {
+    setTarget(document.getElementById(SLOT_IDS[slot]));
+  }, [slot]);
+
+  if (!target) return null;
+  return createPortal(children, target);
+}
+
+```
+
+
+## src/shared/ui/card/card.tsx
+
+```tsx
+import React from "react";
+import styles from "./Card.module.css";
+
+interface CardProps {
+  title?: string;
+  children: React.ReactNode;
+  className?: string;
+}
+
+export function Card({ title, children, className }: CardProps) {
+  return (
+    <div className={`${styles.card} ${className ?? ""}`}>
+      {title && <div className={styles.cardTitle}>{title}</div>}
+      <div className={styles.cardBody}>{children}</div>
+    </div>
+  );
+}
+
+```
+
+
+## src/styles.css
+
+```css
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Serif:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap");
+@import "#/shared/styles/tokens.module.css";
+@import "#/shared/styles/animations.module.css";
+
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#app {
+  min-height: 100%;
+}
+body {
+  margin: 0;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-family);
+}
+
+.academic-label {
+  font-family: var(--font-family);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+```
+
+
+## vite.config.ts
+
+```ts
+import { defineConfig } from 'vite'
+import { devtools } from '@tanstack/devtools-vite'
+
+import { tanstackStart } from '@tanstack/react-start/plugin/vite'
+
+import viteReact from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+
+const config = defineConfig({
+  resolve: { tsconfigPaths: true },
+  plugins: [devtools(), tailwindcss(), tanstackStart(), viteReact()],
+})
+
+export default config
 
 ```

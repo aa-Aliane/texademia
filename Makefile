@@ -1,4 +1,4 @@
-.PHONY: all features routes backend purge_db
+.PHONY: all features routes backend frontend purge_db
 
 all: features routes backend
 
@@ -13,6 +13,9 @@ shared:
 
 backend:
 	codeweaver -input backend -output backend.md
+
+frontend:
+	codeweaver -input frontend -include ".ts,.tsx,.css,.yaml,.*\.example" -ignore "node_modules,dist,build" -output frontend.md
 
 purge_db:
 	docker compose stop backend

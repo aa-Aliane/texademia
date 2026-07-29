@@ -7,7 +7,7 @@ import type { LineAuthor } from "../types/redaction";
 
 interface EditorProps {
   value: string;
-  language: "latex" | "bibtex";
+  language: "latex" | "bibtex" | "log";
   onChange: (value: string) => void;
   lineAuthors?: LineAuthor[];
 }

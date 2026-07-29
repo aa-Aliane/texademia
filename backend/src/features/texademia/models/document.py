@@ -52,7 +52,7 @@ class DocumentFile(SQLModel, table=True):
         foreign_key="documents.id", nullable=False, index=True
     )
     name: str = Field(nullable=False)  # "main.tex", "references.bib"
-    language: str = Field(default="latex", nullable=False)  # "latex" | "bibtex"
+    language: str = Field(default="latex", nullable=False)  # "latex" | "bibtex" | "log"
     content: str = Field(default="", nullable=False)
     line_authors: list[dict] | None = Field(default=None, sa_column=Column(JSON))
 

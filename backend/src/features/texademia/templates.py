@@ -4,7 +4,17 @@ support another style — the .cls/.sty it needs must exist in the server's
 TeX distribution (e.g. IEEEtran needs texlive-publishers installed).
 """
 
-_DEFAULT = [
+from typing import TypedDict, List, Tuple
+
+
+class TemplateFile(TypedDict):
+    name: str
+    language: str
+    content: str
+
+
+# Raw starter tuples: (filename, language, content)
+_DEFAULT: List[Tuple[str, str, str]] = [
     (
         "main.tex",
         "latex",
@@ -13,7 +23,7 @@ _DEFAULT = [
     ("references.bib", "bibtex", ""),
 ]
 
-_ARXIV = [
+_ARXIV: List[Tuple[str, str, str]] = [
     (
         "main.tex",
         "latex",
@@ -30,7 +40,7 @@ _ARXIV = [
     ("references.bib", "bibtex", ""),
 ]
 
-_IEEE = [
+_IEEE: List[Tuple[str, str, str]] = [
     (
         "main.tex",
         "latex",
@@ -46,13 +56,13 @@ _IEEE = [
     ("references.bib", "bibtex", ""),
 ]
 
-_ACL = [
+_ACL: List[Tuple[str, str, str]] = [
     (
         "main.tex",
         "latex",
         "\\documentclass[11pt]{article}\n"
         "\\usepackage[review]{acl}\n"
-        "\\usepackage{times}\n"
+        "\\package{times}\n"
         "\\usepackage{latexsym}\n"
         "\\title{Your Paper Title}\n"
         "\\author{Your Name \\\\ Your Affiliation \\\\ \\texttt{you@example.com}}\n"
@@ -65,10 +75,22 @@ _ACL = [
     ("references.bib", "bibtex", ""),
 ]
 
-_TEMPLATES = {"default": _DEFAULT, "arxiv": _ARXIV, "ieee": _IEEE, "acl": _ACL}
+_TEMPLATES = {
+    "default": _DEFAULT,
+    "arxiv": _ARXIV,
+    "ieee": _IEEE,
+    "acl": _ACL,
+}
 
 TEMPLATE_NAMES = set(_TEMPLATES.keys())
 
 
-def get_template_files(template: str):
-    return _TEMPLATES.get(template, _DEFAULT)
+def get_template_files(template: str) -> List[TemplateFile]:
+    """
+    Returns the starter files for a template as structured dictionaries.
+    """
+    raw_files = _TEMPLATES.get(template, _DEFAULT)
+    return [
+        {"name": name, "language": lang, "content": content}
+        for name, lang, content in raw_files
+    ]

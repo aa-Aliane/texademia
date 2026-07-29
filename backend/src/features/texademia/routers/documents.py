@@ -79,7 +79,9 @@ async def _get_accessible_document(
         .where(Document.id == document_id)
         .options(
             selectinload(Document.files),
-            selectinload(Document.collaborators).selectinload(DocumentCollaborator.user),
+            selectinload(Document.collaborators).selectinload(
+                DocumentCollaborator.user
+            ),
         )
     )
     result = await session.exec(statement)
@@ -104,7 +106,9 @@ async def _get_accessible_document(
         raise HTTPException(status_code=404, detail="Document not found")
 
     if require_write and collab.role != CollaboratorRole.writer:
-        raise HTTPException(status_code=403, detail="You only have read access to this document")
+        raise HTTPException(
+            status_code=403, detail="You only have read access to this document"
+        )
 
     return document, collab.role.value
 
@@ -158,7 +162,9 @@ async def list_documents(
         .where(Document.user_id == user.id)
         .options(
             selectinload(Document.files),
-            selectinload(Document.collaborators).selectinload(DocumentCollaborator.user),
+            selectinload(Document.collaborators).selectinload(
+                DocumentCollaborator.user
+            ),
         )
     )
     owned = list(owned_result.all())
@@ -172,7 +178,9 @@ async def list_documents(
         )
         .options(
             selectinload(Document.files),
-            selectinload(Document.collaborators).selectinload(DocumentCollaborator.user),
+            selectinload(Document.collaborators).selectinload(
+                DocumentCollaborator.user
+            ),
         )
     )
     shared = list(shared_result.all())
@@ -192,10 +200,13 @@ async def create_document(
     session.add(document)
     await session.flush()
 
-    for name, language, content in get_template_files(doc_in.template):
+    for tf in get_template_files(doc_in.template):
         session.add(
             DocumentFile(
-                document_id=document.id, name=name, language=language, content=content
+                document_id=document.id,
+                name=tf["name"],
+                language=tf["language"],
+                content=tf["content"],
             )
         )
 
@@ -221,7 +232,9 @@ async def update_document(
     session: AsyncSession = Depends(get_db),
     user: User = Depends(current_active_user),
 ):
-    document, role = await _get_accessible_document(document_id, session, user, require_write=True)
+    document, role = await _get_accessible_document(
+        document_id, session, user, require_write=True
+    )
 
     if doc_in.title is not None:
         document.title = doc_in.title
@@ -244,7 +257,9 @@ async def delete_document(
     # the document out from under the owner.
     document, role = await _get_accessible_document(document_id, session, user)
     if role != "owner":
-        raise HTTPException(status_code=403, detail="Only the owner can delete this document")
+        raise HTTPException(
+            status_code=403, detail="Only the owner can delete this document"
+        )
     await session.delete(document)
     await session.commit()
 
@@ -275,13 +290,17 @@ async def compile_document(
     session: AsyncSession = Depends(get_db),
     user: User = Depends(current_active_user),
 ):
-    document, _role = await _get_accessible_document(document_id, session, user, require_write=True)
+    document, _role = await _get_accessible_document(
+        document_id, session, user, require_write=True
+    )
 
     main_file = next((f for f in document.files if f.name.endswith(".tex")), None)
     print(
         f"[compile] doc={document_id} template={document.template} "
         f"files={[(f.name, len(f.content)) for f in document.files]} "
-        f"main_snippet={main_file.content[:200]!r}" if main_file else "no-main"
+        f"main_snippet={main_file.content[:200]!r}"
+        if main_file
+        else "no-main"
     )
 
     try:
@@ -321,6 +340,7 @@ async def duplicate_document(
         {"name": f.name, "language": f.language, "content": f.content}
         for f in source.files
     ]
+
     if target_template != source.template:
         source_files = migrate_files_to_template(source_files, target_template)
 

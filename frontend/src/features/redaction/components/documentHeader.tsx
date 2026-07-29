@@ -1,5 +1,4 @@
 // redaction/components/documentHeader.tsx
-import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   Group,
@@ -35,7 +34,7 @@ interface DocumentHeaderProps {
   role: string;             // NEW
 }
 
-function EditableTitle({
+export function EditableTitle({
   title,
   onSave,
   isSaving,
@@ -44,47 +43,44 @@ function EditableTitle({
   onSave: (title: string) => void;
   isSaving: boolean;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(title);
-
-  useEffect(() => setValue(title), [title]);
-
-  const commit = () => {
-    setEditing(false);
-    const trimmed = value.trim() || "Untitled";
-    if (trimmed !== title) onSave(trimmed);
-    else setValue(title);
+  const commit = (el: HTMLHeadingElement) => {
+    const trimmed = el.textContent?.trim() || "Untitled";
+    if (trimmed !== title) {
+      onSave(trimmed);
+    } else {
+      el.textContent = title; // Reset on no change
+    }
   };
 
-  if (editing) {
-    return (
-      <TextInput
-        value={value}
-        onChange={(e) => setValue(e.currentTarget.value)}
-        onBlur={commit}
+  return (
+    <Group gap={6} wrap="nowrap">
+      <Text
+        fw={600}
+        size="sm"
+        truncate
+        contentEditable
+        suppressContentEditableWarning
+        onBlur={(e) => commit(e.currentTarget)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") commit();
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.currentTarget.blur();
+          }
           if (e.key === "Escape") {
-            setValue(title);
-            setEditing(false);
+            e.currentTarget.textContent = title;
+            e.currentTarget.blur();
           }
         }}
-        autoFocus
-        variant="unstyled"
-        styles={{ input: { fontSize: 16, fontWeight: 600, textAlign: "center" } }}
-      />
-    );
-  }
-
-  return (
-    <Group gap={6} wrap="nowrap" onClick={() => setEditing(true)} style={{ cursor: "text" }}>
-      <Text fw={600} size="sm" truncate>
+        style={{ cursor: "text", outline: "none" }}
+      >
         {title}
       </Text>
       {isSaving && <Loader size="xs" />}
     </Group>
   );
 }
+
+
 
 function CompileStatusIndicator({
   phase,
