@@ -61,6 +61,10 @@ services:
     volumes:
       - ./backend:/app
       - compiled_pdfs:/app/compiled_pdfs
+    deploy:
+          resources:
+            limits:
+              cpus: "1.0"
 
   frontend:
     build: ./frontend

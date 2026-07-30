@@ -1,8 +1,10 @@
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
-import { StreamLanguage } from "@codemirror/language";
+import { StreamLanguage, type LanguageSupport, type StreamParser } from "@codemirror/language";
 import { stex } from "@codemirror/legacy-modes/mode/stex";
-import { useEffect, useRef } from "react";
+import { EditorView, type Extension } from "@codemirror/view";
+import { useEffect, useMemo, useRef } from "react";
 import { blameExtension, setLineAuthors } from "./blameExtension";
+import { cursorExtension, setRemoteCursors, type RemoteCursor } from "./cursorExtension";
 import type { LineAuthor } from "../types/redaction";
 
 interface EditorProps {
@@ -10,21 +12,65 @@ interface EditorProps {
   language: "latex" | "bibtex" | "log";
   onChange: (value: string) => void;
   lineAuthors?: LineAuthor[];
+  remoteCursors?: RemoteCursor[];
+  onCursorMove?: (pos: number) => void;
+  readOnly?: boolean;
 }
 
-export function Editor({ value, onChange, lineAuthors }: EditorProps) {
+// Module-level, not per-render — StreamLanguage.define(...) only needs to
+// run once ever, not once per keystroke.
+const stexLanguage = StreamLanguage.define(stex as StreamParser<unknown>);
+
+export function Editor({
+  value,
+  language,
+  onChange,
+  lineAuthors,
+  remoteCursors,
+  onCursorMove,
+  readOnly,
+}: EditorProps) {
   const editorRef = useRef<ReactCodeMirrorRef>(null);
 
   useEffect(() => {
     editorRef.current?.view?.dispatch({ effects: setLineAuthors.of(lineAuthors ?? []) });
   }, [lineAuthors]);
 
+  useEffect(() => {
+    editorRef.current?.view?.dispatch({ effects: setRemoteCursors.of(remoteCursors ?? []) });
+  }, [remoteCursors]);
+
+  // Stable across re-renders — only recreated if onCursorMove's identity
+  // actually changes (it shouldn't, if the caller wraps it in useCallback).
+  const cursorReporter = useMemo(
+    () =>
+      EditorView.updateListener.of((update) => {
+        if (update.selectionSet && onCursorMove) {
+          onCursorMove(update.state.selection.main.head);
+        }
+      }),
+    [onCursorMove]
+  );
+
+  // THE FIX: this used to be an inline array literal rebuilt every render,
+  // which made @uiw/react-codemirror treat every render as "extensions
+  // changed" and fully reconfigure the EditorState — wiping StateFields
+  // like remoteCursorsField and lineAuthorsField back to their initial
+  // value. Memoizing it means the editor only actually reconfigures when
+  // language or the cursor listener genuinely changes, not on every
+  // document refetch / unrelated parent re-render.
+  const extensions: Extension[] = useMemo(
+    () => [stexLanguage, blameExtension, cursorExtension, cursorReporter],
+    [cursorReporter]
+  );
+
   return (
     <CodeMirror
       ref={editorRef}
       value={value}
       height="100%"
-      extensions={[StreamLanguage.define(stex), blameExtension]}
+      editable={!readOnly}
+      extensions={extensions}
       onChange={onChange}
       style={{ height: "100%" }}
     />

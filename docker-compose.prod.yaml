@@ -69,6 +69,11 @@ services:
     networks:
       - internal
 
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+
   frontend:
     build:
       context: ./frontend

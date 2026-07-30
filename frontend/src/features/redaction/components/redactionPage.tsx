@@ -1,3 +1,4 @@
+import { useCallback,  useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Editor } from "./editor";
@@ -11,10 +12,13 @@ import { useUpdateDocumentTitle } from "../hooks/useUpdateDocumentTitle";
 import { useDocumentSocket } from "../hooks/useDocumentSocket";
 import { documentQueryOptions, duplicateDocument } from "../api/redaction";
 import { useRedactionStore } from "../store/redactionStore";
+import { useCurrentUser } from "#/features/auth";
 
 interface RedactionPageProps {
   documentId: string;
 }
+
+const CURSOR_THROTTLE_MS = 80;
 
 export function RedactionPage({ documentId }: RedactionPageProps) {
   const navigate = useNavigate();
@@ -31,26 +35,26 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
     (state) => state.activeFiles[documentId] ?? document?.files[0]?.id ?? null
   );
   const dialogState = useRedactionStore((state) => state.dialogs[documentId]);
+  const dirtyCount = useRedactionStore((state) => state.dirtyFiles[documentId]?.size ?? 0);
 
   const setActiveTab = useRedactionStore((state) => state.setActiveTab);
   const setActiveFileId = useRedactionStore((state) => state.setActiveFile);
   const setDialog = useRedactionStore((state) => state.setDialog);
-
-  const dirtyCount = useRedactionStore(
-    (state) => state.dirtyFiles[documentId]?.size ?? 0
-  );
   const markFileDirty = useRedactionStore((state) => state.markFileDirty);
 
+  const { data: currentUser } = useCurrentUser();
 
   // Live sockets & refresh trigger
-  const { presenceByFile, setActiveFile: setSocketActiveFile } = useDocumentSocket(
-    documentId,
-    (event) => {
-      if (event.phase) {
-        queryClient.invalidateQueries({ queryKey: ["document", documentId] });
-      }
+  const {
+    presenceByFile,
+    remoteCursorsByFile,
+    setActiveFile: setSocketActiveFile,
+    sendCursor,
+  } = useDocumentSocket(documentId, currentUser?.id, (event) => {
+    if (event.phase) {
+      queryClient.invalidateQueries({ queryKey: ["document", documentId] });
     }
-  );
+  });
 
   const {
     compile,
@@ -74,11 +78,45 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
     },
   });
 
-  if (!document) return null;
-
-  const files = document.files;
+  const files = document?.files ?? [];
   const currentTabId = activeTabId || activeFileId || files[0]?.id || "";
   const activeFile = files.find((f) => f.id === currentTabId || f.id === activeFileId);
+
+  // Throttled cursor sender — recreated only when the target file changes,
+  // so rapid selection events within a file share one throttle window
+  // instead of resetting it on every keystroke.
+  const lastSentRef = useRef(0);
+  const pendingRef = useRef<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleCursorMove = useCallback(
+    (pos: number) => {
+      if (!currentTabId || currentTabId === PREVIEW_TAB_ID || currentTabId === LOG_TAB_ID) return;
+
+      const now = Date.now();
+      const elapsed = now - lastSentRef.current;
+
+      if (elapsed >= CURSOR_THROTTLE_MS) {
+        lastSentRef.current = now;
+        sendCursor(currentTabId, pos);
+      } else {
+        pendingRef.current = pos;
+        if (!timerRef.current) {
+          timerRef.current = setTimeout(() => {
+            timerRef.current = null;
+            if (pendingRef.current !== null) {
+              lastSentRef.current = Date.now();
+              sendCursor(currentTabId, pendingRef.current);
+              pendingRef.current = null;
+            }
+          }, CURSOR_THROTTLE_MS - elapsed);
+        }
+      }
+    },
+    [currentTabId, sendCursor]
+  );
+
+  if (!document) return null;
 
   const updateActiveFileContent = (content: string) => {
     const fileId = activeFileId ?? files[0]?.id;
@@ -144,6 +182,8 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
             language={activeFile.language}
             onChange={updateActiveFileContent}
             lineAuthors={activeFile.lineAuthors}
+            remoteCursors={remoteCursorsByFile[currentTabId]}
+            onCursorMove={handleCursorMove}
           />
         ) : null}
       </div>
