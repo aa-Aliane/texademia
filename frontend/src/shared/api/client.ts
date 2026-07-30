@@ -26,24 +26,24 @@ interface RequestOptions extends RequestInit {
   cookieHeader?: string | null;
 }
 
-let refreshPromise: Promise<void> | null = null;
+let refreshPromise: Promise<string[]> | null = null;
 
-async function refreshAccessToken(): Promise<void> {
+async function refreshAccessToken(cookieHeader?: string | null): Promise<string[]> {
   if (refreshPromise) return refreshPromise;
 
   const baseUrl = resolveBaseUrl();
   refreshPromise = fetch(`${baseUrl}/api/auth/jwt/refresh`, {
     method: "POST",
     credentials: "include",
+    headers: cookieHeader ? { Cookie: cookieHeader } : {},
   })
-    .then((res) => {
-      if (!res.ok) {
-        throw new ApiError("Refresh failed", res.status, null);
-      }
-    })
-    .finally(() => {
-      refreshPromise = null;
-    });
+  .then((res) => {
+      if (!res.ok) throw new ApiError("Refresh failed", res.status, null);
+      return res.headers.getSetCookie();   // forward these to the browser
+  })
+  .finally(() => {
+    refreshPromise = null;
+  });
 
   return refreshPromise;
 }
@@ -69,12 +69,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   // retry the original request. We can't refresh during SSR because there is
   // no browser cookie jar there.
   if (
-    res.status === 401 &&
-    typeof window !== "undefined" &&
-    path !== "/api/auth/jwt/refresh"
+    res.status === 401 && path !== "/api/auth/jwt/refresh"
   ) {
     try {
-      await refreshAccessToken();
+      await refreshAccessToken(cookieHeader);
       res = await doFetch();
     } catch {
       // Refresh failed; keep the original 401 response so the caller can
