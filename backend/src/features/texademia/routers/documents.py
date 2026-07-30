@@ -19,6 +19,8 @@ from src.features.texademia.models.document import (
     DocumentCollaborator,
     CollaboratorStatus,
     CollaboratorRole,
+    DocumentFileVersion,
+    VersionTrigger,
 )
 from src.features.texademia.schemas.document import (
     DocumentCreate,
@@ -27,6 +29,7 @@ from src.features.texademia.schemas.document import (
     DocumentDuplicate,
     FileUpdate,
     CollaboratorRead,
+    FileVersionRead,
 )
 from src.features.texademia.templates import get_template_files
 from src.features.texademia.services.compiler import (
@@ -37,6 +40,12 @@ from src.features.texademia.services.compiler import (
 from src.features.texademia.services.template_migrator import (
     migrate_files_to_template,
 )
+
+from src.features.texademia.services.versioning import (
+    create_checkpoint,
+    reconstruct_content_at,
+)
+
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -188,6 +197,7 @@ async def list_documents(
     return [_to_document_read(d, "owner") for d in owned] + [
         _to_document_read(d, _role_for(d, user)) for d in shared
     ]
+
 
 async def list_accessible_document_ids(
     session: AsyncSession, user: User
@@ -383,3 +393,71 @@ async def duplicate_document(
     await session.commit()
     await session.refresh(new_document, attribute_names=["files", "collaborators"])
     return _to_document_read(new_document, "owner")
+
+
+@router.post(
+    "/{document_id}/files/{file_id}/checkpoint",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def checkpoint_file(
+    document_id: uuid.UUID,
+    file_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    user: User = Depends(current_active_user),
+):
+    """Called by the frontend after an idle-edit debounce window."""
+    file = await _get_owned_file(document_id, file_id, session, user)
+    version = create_checkpoint(file, VersionTrigger.idle, user.email)
+    if version:
+        session.add(version)
+        session.add(file)
+        await session.commit()
+
+
+@router.get(
+    "/{document_id}/files/{file_id}/versions",
+    response_model=List[FileVersionRead],
+)
+async def list_file_versions(
+    document_id: uuid.UUID,
+    file_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    user: User = Depends(current_active_user),
+):
+    file = await _get_owned_file(document_id, file_id, session, user)
+    return file.versions  # already ordered desc via relationship
+
+
+@router.post(
+    "/{document_id}/files/{file_id}/versions/{version_id}/restore",
+    response_model=FileRead,
+)
+async def restore_file_version(
+    document_id: uuid.UUID,
+    file_id: uuid.UUID,
+    version_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    user: User = Depends(current_active_user),
+):
+    file = await _get_owned_file(document_id, file_id, session, user)
+
+    if not any(v.id == version_id for v in file.versions):
+        raise HTTPException(status_code=404, detail="Version not found")
+
+    restored_content = reconstruct_content_at(file.versions, file.content, version_id)
+
+    # checkpoint the pre-restore state so it isn't lost, then apply restore
+    pre_restore_checkpoint = create_checkpoint(file, VersionTrigger.restore, user.email)
+    if pre_restore_checkpoint:
+        session.add(pre_restore_checkpoint)
+
+    file.line_authors = _update_line_authors(
+        file.content, restored_content, file.line_authors, f"{user.email} (restore)"
+    )
+    file.content = restored_content
+    file.last_checkpoint_content = restored_content  # restore point is the new baseline
+
+    session.add(file)
+    await session.commit()
+    await session.refresh(file)
+    return file

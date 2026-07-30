@@ -5,6 +5,8 @@ from pydantic import BaseModel
 from enum import Enum
 from pydantic import EmailStr
 
+from src.features.texademia.models.document import VersionTrigger
+
 
 class CollaboratorRole(str, Enum):
     reader = "reader"
@@ -89,3 +91,12 @@ class FileUpdate(BaseModel):
 
 class CompileResponse(BaseModel):
     pdf_url: str
+
+
+class FileVersionRead(BaseModel):
+    id: uuid.UUID
+    created_at: datetime
+    trigger: VersionTrigger
+    author: str
+
+    model_config = {"from_attributes": True}
