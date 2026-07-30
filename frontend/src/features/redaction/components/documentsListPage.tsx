@@ -49,6 +49,7 @@ import { CreateDocumentDialog } from "./createDocumentDialog";
 import { DuplicateDocumentDialog } from "./duplicateDocumentDialog";
 import { CollaboratorsDialog } from "./collaboratorsDialog";
 import { useDocumentsPresence } from "../hooks/useDocumentsPresence";
+import { useDocumentsUIStore } from "../store/documentsStore";
 import type { RedactionDocument } from "../types/redaction";
 import classes from "./documentsListPage.module.css";
 
@@ -73,7 +74,10 @@ export function DocumentsListPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [dialogOpened, setDialogOpened] = useState(false);
+  // dialog opened state
+  const dialogOpened = useDocumentsUIStore((state) => state.dialogOpened);
+  const setDialogOpened = useDocumentsUIStore((state) => state.setDialogOpened)
+
   const [duplicateTarget, setDuplicateTarget] = useState<RedactionDocument | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<RedactionDocument | null>(null);
   const [collaboratorsTarget, setCollaboratorsTarget] = useState<RedactionDocument | null>(null); // NEW
@@ -403,10 +407,10 @@ export function DocumentsListPage() {
             System Storage
           </Text>
           <Title order={2} c="accent">
-            Your Library
+            Your Library {String(dialogOpened)}
           </Title>
         </Stack>
-        <Button leftSection={<IconPlus size={15} />} onClick={() => setDialogOpened(true)}>
+        <Button leftSection={<IconPlus size={15} />} onClick={() => { setDialogOpened(true); console.log("dliag opened", dialogOpened)}}>
           New document
         </Button>
       </Group>
