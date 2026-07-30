@@ -86,11 +86,19 @@ export function DocumentsListPage() {
   const deleteTarget = useDocumentsUIStore((state: DocumentsUIStoreState) => state.deleteTarget);
   const setDeleteTarget = useDocumentsUIStore((state: DocumentsUIStoreState) => state.setDeleteTarget);
 
+  // collaborators target state
   const collaboratorsTarget = useDocumentsUIStore((state: DocumentsUIStoreState) => state.collaboratorsTarget);
   const setCollaboratorsTarget = useDocumentsUIStore((state: DocumentsUIStoreState) => state.setCollaboratorsTarget)
 
 
-  const [globalFilter, setGlobalFilter] = useState("");
+
+  // global filter state
+  // const globalFilter = useDocumentsUIStore((state: DocumentsUIStoreState) => state.globalFilter);
+  // const setGlobalFilter = useDocumentsUIStore((state: DocumentsUIStoreState) => state.setGlobalFilter);
+
+  const [ globalFilter, setGlobalFilter] = useState("");
+
+
   const [sorting, setSorting] = useState<SortingState>([{ id: "updatedAt", desc: true }]);
 
   // Collapse the per-row action icons into a single "⋮" menu once the

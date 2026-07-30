@@ -19,6 +19,10 @@ export interface DocumentsUIStoreState {
   collaboratorsTarget: RedactionDocument | null;
   setCollaboratorsTarget: (target: RedactionDocument | null) => void;
 
+  // global filter state
+  globalFilter: string;
+  setGlobalFilter: (filter: string) => void;
+
 }
 
 export const useDocumentsUIStore = create<DocumentsUIStoreState>((set)   => ({
@@ -37,5 +41,9 @@ export const useDocumentsUIStore = create<DocumentsUIStoreState>((set)   => ({
   // collaborators target state
   collaboratorsTarget: null,
   setCollaboratorsTarget: (target: RedactionDocument | null) => set({ collaboratorsTarget: target }),
+
+   // global filter state
+   globalFilter: "",
+   setGlobalFilter: (filter: string) => set({ globalFilter: filter }),
 
 }));
