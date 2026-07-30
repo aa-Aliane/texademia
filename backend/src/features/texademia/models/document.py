@@ -83,6 +83,19 @@ class DocumentFile(SQLModel, table=True):
 
     document: "Document" = Relationship(back_populates="files")
 
+    # snapshot of content at the last checkpoint — lets us diff cheaply
+    # without re-reading version history
+    last_checkpoint_content: str | None = Field(default=None)
+
+    versions: List["DocumentFileVersion"] = Relationship(
+        back_populates="file",
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "lazy": "selectin",
+            "order_by": "DocumentFileVersion.created_at.desc()",
+        },
+    )
+
 
 class CollaboratorRole(str, enum.Enum):
     reader = "reader"
