@@ -10,6 +10,10 @@ interface DocumentsUIStoreState {
   // duplicate target state
   duplicateTarget: RedactionDocument | null;
   setDuplicateTarget: (target: RedactionDocument | null) => void;
+
+  // delete target state
+  deleteTarget: RedactionDocument | null;
+  setDeleteTarget: (target: RedactionDocument | null) => void;
 }
 
 export const useDocumentsUIStore = create<DocumentsUIStoreState>((set)   => ({
@@ -20,5 +24,9 @@ export const useDocumentsUIStore = create<DocumentsUIStoreState>((set)   => ({
   // duplicate target state
   duplicateTarget: null,
   setDuplicateTarget: (target: RedactionDocument | null) => set({ duplicateTarget: target }),
+
+  // delete target state
+  deleteTarget: null,
+  setDeleteTarget: (target: RedactionDocument | null) => set({ deleteTarget: target }),
 
 }));

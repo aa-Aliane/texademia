@@ -82,7 +82,11 @@ export function DocumentsListPage() {
   const duplicateTarget = useDocumentsUIStore((state) => state.duplicateTarget);
   const setDuplicateTarget = useDocumentsUIStore((state) => state.setDuplicateTarget);
 
-  const [deleteTarget, setDeleteTarget] = useState<RedactionDocument | null>(null);
+  // delete target state
+  const deleteTarget = useDocumentsUIStore((state) => state.deleteTarget);
+  const setDeleteTarget = useDocumentsUIStore((state) => state.setDeleteTarget);
+
+
   const [collaboratorsTarget, setCollaboratorsTarget] = useState<RedactionDocument | null>(null); // NEW
   const [globalFilter, setGlobalFilter] = useState("");
   const [sorting, setSorting] = useState<SortingState>([{ id: "updatedAt", desc: true }]);
