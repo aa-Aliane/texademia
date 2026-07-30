@@ -14,7 +14,7 @@ export function AppShell({ children }: AppShellProps) {
       styles={{
         main: {
             backgroundColor: "var(--color-bg)",
-            minHeight: "calc(100dvh - 56px)",
+            height: "calc(100dvh - 56px)",
             overflowY: "auto",
             overflowX: "hidden",
           },

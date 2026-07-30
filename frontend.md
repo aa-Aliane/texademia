@@ -1158,7 +1158,7 @@ export interface RemoteCursor {
   userId: string;
   name: string;
   color: string;
-  pos: number; // character offset in the doc
+  pos: number; // character offset in the document
 }
 
 export const setRemoteCursors = StateEffect.define<RemoteCursor[]>();
@@ -1167,43 +1167,67 @@ export const remoteCursorsField = StateField.define<RemoteCursor[]>({
   create: () => [],
   update(value, tr) {
     for (const effect of tr.effects) {
-      if (effect.is(setRemoteCursors)) return effect.value;
+      if (effect.is(setRemoteCursors)) {
+        // Incoming positions are already current — no mapping needed.
+        return effect.value;
+      }
     }
-    // map positions through local edits so cursors don't drift on your own typing
-    return value.map((c) => ({ ...c, pos: tr.changes.mapPos(c.pos) }));
+    // On local edits, re-map existing remote cursor positions through the
+    // change set so they don't drift out of place while you type above them.
+    if (tr.docChanged) {
+      return value.map((c) => ({ ...c, pos: tr.changes.mapPos(c.pos) }));
+    }
+    return value;
   },
 });
 
-class CursorWidget extends WidgetType {
-  constructor(private name: string, private color: string) {
+class RemoteCursorWidget extends WidgetType {
+  constructor(
+    private name: string,
+    private color: string
+  ) {
     super();
   }
-  eq(other: CursorWidget) {
+
+  eq(other: RemoteCursorWidget) {
     return other.name === this.name && other.color === this.color;
   }
+
   toDOM() {
     const wrap = document.createElement("span");
-    wrap.style.position = "relative";
-    wrap.style.borderLeft = `2px solid ${this.color}`;
-    wrap.style.marginLeft = "-1px";
+    wrap.className = "cm-remote-cursor";
+    Object.assign(wrap.style, {
+      position: "relative",
+      display: "inline-block",
+      width: "0",
+      height: "1.2em",
+      verticalAlign: "text-bottom",
+      borderLeft: `2px solid ${this.color}`,
+      marginLeft: "-1px",
+      pointerEvents: "none",
+    });
 
     const label = document.createElement("span");
     label.textContent = this.name;
     Object.assign(label.style, {
       position: "absolute",
-      top: "-1.2em",
-      left: "0",
+      top: "-1.15em",
+      left: "-2px",
       fontSize: "0.7em",
-      padding: "1px 4px",
+      lineHeight: "1.4",
+      padding: "0 4px",
       borderRadius: "3px",
       whiteSpace: "nowrap",
       color: "#fff",
       background: this.color,
       pointerEvents: "none",
+      userSelect: "none",
+      zIndex: "10",
     });
     wrap.appendChild(label);
     return wrap;
   }
+
   ignoreEvent() {
     return true;
   }
@@ -1211,10 +1235,14 @@ class CursorWidget extends WidgetType {
 
 function buildCursorDecorations(cursors: RemoteCursor[]): DecorationSet {
   if (!cursors.length) return Decoration.none;
+  // Decoration.set requires ranges in ascending position order.
   const sorted = [...cursors].sort((a, b) => a.pos - b.pos);
   return Decoration.set(
     sorted.map((c) =>
-      Decoration.widget({ widget: new CursorWidget(c.name, c.color), side: 1 }).range(c.pos)
+      Decoration.widget({
+        widget: new RemoteCursorWidget(c.name, c.color),
+        side: 1,
+      }).range(c.pos)
     )
   );
 }
@@ -1554,6 +1582,7 @@ export function DocumentMenu({ template, pdfUrl, onDuplicateClick, onShareClick,
 .actionsCell {
   position: relative;
   overflow: hidden;
+  padding-inline: 8px;
 }
 
 .overlay {
@@ -1562,11 +1591,11 @@ export function DocumentMenu({ template, pdfUrl, onDuplicateClick, onShareClick,
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 6px;
+  padding-inline: 8px;
 
   transition: opacity 120ms ease;
   z-index: 900;
-
 }
 
 .actionsCell:hover .overlay {
@@ -1575,6 +1604,13 @@ export function DocumentMenu({ template, pdfUrl, onDuplicateClick, onShareClick,
 
 .row {
   cursor: pointer;
+}
+
+.actionsCell {
+  position: relative;
+  overflow: hidden;
+  padding-inline: 6px;
+  min-width: 120px; /* NEW */
 }
 
 ```
@@ -1596,6 +1632,7 @@ import {
   useReactTable,
   type SortingState,
 } from "@tanstack/react-table";
+import { useMediaQuery } from "@mantine/hooks";
 import {
   ActionIcon,
   Indicator,
@@ -1604,6 +1641,7 @@ import {
   Box,
   Button,
   Group,
+  Menu,
   Modal,
   Pagination,
   Stack,
@@ -1618,6 +1656,7 @@ import {
   IconChevronUp,
   IconCopy,
   IconCrown,
+  IconDotsVertical,
   IconDownload,
   IconFileText,
   IconPlus,
@@ -1659,6 +1698,10 @@ export function DocumentsListPage() {
   const [collaboratorsTarget, setCollaboratorsTarget] = useState<RedactionDocument | null>(null); // NEW
   const [globalFilter, setGlobalFilter] = useState("");
   const [sorting, setSorting] = useState<SortingState>([{ id: "updatedAt", desc: true }]);
+
+  // Collapse the per-row action icons into a single "⋮" menu once the
+  // viewport gets tight (matches the mantine-breakpoint-md var: 62em).
+  const isCompact = useMediaQuery("(max-width: 62em)");
 
   const { mutate: createNew, isPending: isCreating } = useMutation({
     mutationFn: ({ title, template }: { title: string; template: string }) =>
@@ -1723,59 +1766,59 @@ export function DocumentsListPage() {
         },
       }),
       columnHelper.display({
-              id: "collaborators",
-              header: "Access",
-              cell: (info) => {
-                const doc = info.row.original;
-                const others = doc.collaborators ?? [];
+        id: "collaborators",
+        header: "Access",
+        cell: (info) => {
+          const doc = info.row.original;
+          const others = doc.collaborators ?? [];
 
-                if (others.length === 0) {
-                  return (
-                    <Text size="xs" c="dimmed" ta="center">
-                      Only you
-                    </Text>
-                  );
-                }
+          if (others.length === 0) {
+            return (
+              <Text size="xs" c="dimmed" ta="center">
+                Only you
+              </Text>
+            );
+          }
 
-                return (
-                  <Group gap={6} wrap="nowrap">
-                    {others.slice(0, 4).map((c) => (
-                      <Tooltip
-                        key={c.id}
-                        label={`${c.email} · ${c.role === "writer" ? "Can edit" : "Can view"}${
-                          c.status === "pending" ? " (invitation pending)" : ""
-                        }`}
-                      >
-                        <Indicator
-                          disabled={c.status !== "pending"}
-                          size={14}
-                          color="var(--color-warning)"
-                          offset={3}
-                          position="bottom-end"
-                          label={<IconClock size={9} />}
-                          styles={{ indicator: { padding: 0 } }}
-                        >
-                          <Avatar
-                            radius="xl"
-                            size={28}
-                            color={c.status === "pending" ? "gray" : "accent"}
-                            variant={c.status === "pending" ? "light" : "filled"}
-                          >
-                            {c.email.slice(0, 2).toUpperCase()}
-                          </Avatar>
-                        </Indicator>
-                      </Tooltip>
-                    ))}
-                    {others.length > 4 && (
-                      <Avatar radius="xl" size={28}>
-                        +{others.length - 4}
-                      </Avatar>
-                    )}
-                  </Group>
-                );
-              },
-              enableSorting: false,
-            }),
+          return (
+            <Group gap={6} wrap="nowrap">
+              {others.slice(0, 4).map((c) => (
+                <Tooltip
+                  key={c.id}
+                  label={`${c.email} · ${c.role === "writer" ? "Can edit" : "Can view"}${
+                    c.status === "pending" ? " (invitation pending)" : ""
+                  }`}
+                >
+                  <Indicator
+                    disabled={c.status !== "pending"}
+                    size={14}
+                    color="var(--color-warning)"
+                    offset={3}
+                    position="bottom-end"
+                    label={<IconClock size={9} />}
+                    styles={{ indicator: { padding: 0 } }}
+                  >
+                    <Avatar
+                      radius="xl"
+                      size={28}
+                      color={c.status === "pending" ? "gray" : "accent"}
+                      variant={c.status === "pending" ? "light" : "filled"}
+                    >
+                      {c.email.slice(0, 2).toUpperCase()}
+                    </Avatar>
+                  </Indicator>
+                </Tooltip>
+              ))}
+              {others.length > 4 && (
+                <Avatar radius="xl" size={28}>
+                  +{others.length - 4}
+                </Avatar>
+              )}
+            </Group>
+          );
+        },
+        enableSorting: false,
+      }),
       columnHelper.accessor("updatedAt", {
         header: "Last Modified",
         cell: (info) => (
@@ -1803,6 +1846,65 @@ export function DocumentsListPage() {
         header: "Actions",
         cell: (info) => {
           const doc = info.row.original;
+
+          // Narrow screens: collapse everything into a single menu button
+          // so the column never has to squeeze 3-4 icons into a tiny cell.
+          if (isCompact) {
+            return (
+              <Box
+                h="100%"
+                mih={40}
+                style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+              >
+                <Menu shadow="md" width={190} position="bottom-end" withinPortal>
+                  <Menu.Target>
+                    <ActionIcon
+                      variant="subtle"
+                      color="gray"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <IconDotsVertical size={15} />
+                    </ActionIcon>
+                  </Menu.Target>
+                  <Menu.Dropdown onClick={(e) => e.stopPropagation()}>
+                    {doc.role === "owner" && (
+                      <Menu.Item
+                        leftSection={<IconUsers size={14} />}
+                        onClick={() => setCollaboratorsTarget(doc)}
+                      >
+                        Share
+                      </Menu.Item>
+                    )}
+                    <Menu.Item
+                      leftSection={<IconCopy size={14} />}
+                      onClick={() => setDuplicateTarget(doc)}
+                    >
+                      Duplicate
+                    </Menu.Item>
+                    <Menu.Item
+                      leftSection={<IconDownload size={14} />}
+                      disabled={!doc.pdfUrl}
+                      component="a"
+                      href={doc.pdfUrl ?? undefined}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {doc.pdfUrl ? "Download PDF" : "Compile first"}
+                    </Menu.Item>
+                    <Menu.Divider />
+                    <Menu.Item
+                      leftSection={<IconTrash size={14} />}
+                      color="red"
+                      onClick={() => setDeleteTarget(doc)}
+                    >
+                      Delete
+                    </Menu.Item>
+                  </Menu.Dropdown>
+                </Menu>
+              </Box>
+            );
+          }
+
           return (
             <Box className={classes.actionsCell} h="100%" mih={40}>
               <div className={classes.overlay}>
@@ -1816,7 +1918,7 @@ export function DocumentsListPage() {
                         setCollaboratorsTarget(doc);
                       }}
                     >
-                      <IconUsers size={16} />
+                      <IconUsers size={15} />
                     </ActionIcon>
                   </Tooltip>
                 )}
@@ -1829,7 +1931,7 @@ export function DocumentsListPage() {
                       setDuplicateTarget(doc);
                     }}
                   >
-                    <IconCopy size={16} />
+                    <IconCopy size={15} />
                   </ActionIcon>
                 </Tooltip>
                 <Tooltip label={doc.pdfUrl ? "Download PDF" : "Compile first"}>
@@ -1842,8 +1944,18 @@ export function DocumentsListPage() {
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
+                    styles={{
+                      root: {
+                        backgroundColor: "transparent",
+                        "&[data-disabled]": {
+                          backgroundColor: "transparent",
+                          color: "var(--color-text-muted)",
+                          opacity: 0.5,
+                        },
+                      },
+                    }}
                   >
-                    <IconDownload size={16} />
+                    <IconDownload size={15} />
                   </ActionIcon>
                 </Tooltip>
                 <Tooltip label="Delete">
@@ -1855,7 +1967,7 @@ export function DocumentsListPage() {
                       setDeleteTarget(doc);
                     }}
                   >
-                    <IconTrash size={16} />
+                    <IconTrash size={15} />
                   </ActionIcon>
                 </Tooltip>
               </div>
@@ -1865,7 +1977,7 @@ export function DocumentsListPage() {
         enableSorting: false,
       }),
     ],
-    []
+    [isCompact]
   );
 
   const table = useReactTable({
@@ -1889,7 +2001,7 @@ export function DocumentsListPage() {
   const to = Math.min(from + table.getState().pagination.pageSize - 1, total);
 
   return (
-    <Stack p="xl" gap="lg">
+    <Stack p={{ base: "md", sm: "xl" }} gap="lg">
       <Group justify="space-between" align="flex-end">
         <Stack gap={2}>
           <Text ff="monospace" fz={11} c="dimmed" tt="uppercase" style={{ letterSpacing: "0.2em" }}>
@@ -1899,14 +2011,14 @@ export function DocumentsListPage() {
             Your Library
           </Title>
         </Stack>
-        <Button leftSection={<IconPlus size={16} />} onClick={() => setDialogOpened(true)}>
+        <Button leftSection={<IconPlus size={15} />} onClick={() => setDialogOpened(true)}>
           New document
         </Button>
       </Group>
 
       <TextInput
         placeholder="Search documents…"
-        leftSection={<IconSearch size={16} />}
+        leftSection={<IconSearch size={15} />}
         value={globalFilter}
         onChange={(e) => setGlobalFilter(e.currentTarget.value)}
         maw={360}
@@ -1919,62 +2031,92 @@ export function DocumentsListPage() {
           overflow: "hidden",
         }}
       >
-        <Table withColumnBorders highlightOnHover verticalSpacing="md" horizontalSpacing="lg">
-          <Table.Thead bg="gray.0">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <Table.Tr key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <Table.Th
-                    key={header.id}
-                    onClick={header.column.getToggleSortingHandler()}
-                    style={{ cursor: header.column.getCanSort() ? "pointer" : "default" }}
-                  >
-                    <Group gap={4} wrap="nowrap">
-                      <Text
-                        ff="monospace"
-                        fz={11}
-                        fw={700}
-                        tt="uppercase"
-                        c="dimmed"
-                        style={{ letterSpacing: "0.08em" }}
-                      >
-                        {flexRender(header.column.columnDef.header, header.getContext())}
-                      </Text>
-                      {header.column.getIsSorted() === "asc" && <IconChevronUp size={12} />}
-                      {header.column.getIsSorted() === "desc" && <IconChevronDown size={12} />}
-                    </Group>
-                  </Table.Th>
-                ))}
-              </Table.Tr>
-            ))}
-          </Table.Thead>
-          <Table.Tbody>
-            {rows.map((row) => (
-              <Table.Tr
-                key={row.id}
-                className={classes.row}
-                onClick={() =>
-                  navigate({ to: "/redaction/$documentId", params: { documentId: row.original.id } })
-                }
-              >
-                {row.getVisibleCells().map((cell) => (
-                  <Table.Td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</Table.Td>
-                ))}
-              </Table.Tr>
-            ))}
-            {rows.length === 0 && !isLoading && (
-              <Table.Tr>
-                <Table.Td colSpan={columns.length}>
-                  <Text c="dimmed" ta="center" py="lg">
-                    {globalFilter ? "No documents match your search." : "No documents yet — create one to get started."}
-                  </Text>
-                </Table.Td>
-              </Table.Tr>
-            )}
-          </Table.Tbody>
-        </Table>
+        {/* Only the table itself scrolls horizontally — the footer below
+            stays put so the pagination controls are always visible. */}
+        <Box style={{ overflowX: "auto" }}>
+          <Table
+            withColumnBorders
+            highlightOnHover
+            verticalSpacing="md"
+            horizontalSpacing="lg"
+            miw={720}
+            style={{ tableLayout: "fixed" }}
+          >
+            <Table.Thead bg="gray.0">
+              {table.getHeaderGroups().map((headerGroup) => (
+                <Table.Tr key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <Table.Th
+                      key={header.id}
+                      onClick={header.column.getToggleSortingHandler()}
+                      style={{
+                        cursor: header.column.getCanSort() ? "pointer" : "default",
+                        ...(header.id === "actions"
+                          ? { width: isCompact ? 56 : 150, textAlign: "center" }
+                          : {}),
+                      }}
+                    >
+                      <Group gap={4} wrap="nowrap" justify={header.id === "actions" ? "center" : "flex-start"}>
+                        <Text
+                          ff="monospace"
+                          fz={11}
+                          fw={700}
+                          tt="uppercase"
+                          c="dimmed"
+                          style={{ letterSpacing: "0.08em" }}
+                        >
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                        </Text>
+                        {header.column.getIsSorted() === "asc" && <IconChevronUp size={12} />}
+                        {header.column.getIsSorted() === "desc" && <IconChevronDown size={12} />}
+                      </Group>
+                    </Table.Th>
+                  ))}
+                </Table.Tr>
+              ))}
+            </Table.Thead>
+            <Table.Tbody>
+              {rows.map((row) => (
+                <Table.Tr
+                  key={row.id}
+                  className={classes.row}
+                  onClick={() =>
+                    navigate({ to: "/redaction/$documentId", params: { documentId: row.original.id } })
+                  }
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <Table.Td
+                      key={cell.id}
+                      style={
+                        cell.column.id === "actions" ? { width: isCompact ? 56 : 150 } : undefined
+                      }
+                    >
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </Table.Td>
+                  ))}
+                </Table.Tr>
+              ))}
+              {rows.length === 0 && !isLoading && (
+                <Table.Tr>
+                  <Table.Td colSpan={columns.length}>
+                    <Text c="dimmed" ta="center" py="lg">
+                      {globalFilter ? "No documents match your search." : "No documents yet — create one to get started."}
+                    </Text>
+                  </Table.Td>
+                </Table.Tr>
+              )}
+            </Table.Tbody>
+          </Table>
+        </Box>
 
-        <Group justify="space-between" p="md" bg="gray.0" style={{ borderTop: "1px solid var(--mantine-color-gray-3)" }}>
+        <Group
+          justify="space-between"
+          p="md"
+          bg="gray.0"
+          wrap="wrap"
+          gap="sm"
+          style={{ borderTop: "1px solid var(--mantine-color-gray-3)" }}
+        >
           <Text ff="monospace" fz={11} c="dimmed">
             {total === 0 ? "NO RESULTS" : `SHOWING ${from} TO ${to} OF ${total} RESULTS`}
           </Text>
@@ -2094,10 +2236,12 @@ export function DuplicateDocumentDialog({
 
 ```tsx
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
-import { StreamLanguage } from "@codemirror/language";
+import { StreamLanguage, type LanguageSupport, type StreamParser } from "@codemirror/language";
 import { stex } from "@codemirror/legacy-modes/mode/stex";
-import { useEffect, useRef } from "react";
+import { EditorView, type Extension } from "@codemirror/view";
+import { useEffect, useMemo, useRef } from "react";
 import { blameExtension, setLineAuthors } from "./blameExtension";
+import { cursorExtension, setRemoteCursors, type RemoteCursor } from "./cursorExtension";
 import type { LineAuthor } from "../types/redaction";
 
 interface EditorProps {
@@ -2105,21 +2249,65 @@ interface EditorProps {
   language: "latex" | "bibtex" | "log";
   onChange: (value: string) => void;
   lineAuthors?: LineAuthor[];
+  remoteCursors?: RemoteCursor[];
+  onCursorMove?: (pos: number) => void;
+  readOnly?: boolean;
 }
 
-export function Editor({ value, onChange, lineAuthors }: EditorProps) {
+// Module-level, not per-render — StreamLanguage.define(...) only needs to
+// run once ever, not once per keystroke.
+const stexLanguage = StreamLanguage.define(stex as StreamParser<unknown>);
+
+export function Editor({
+  value,
+  language,
+  onChange,
+  lineAuthors,
+  remoteCursors,
+  onCursorMove,
+  readOnly,
+}: EditorProps) {
   const editorRef = useRef<ReactCodeMirrorRef>(null);
 
   useEffect(() => {
     editorRef.current?.view?.dispatch({ effects: setLineAuthors.of(lineAuthors ?? []) });
   }, [lineAuthors]);
 
+  useEffect(() => {
+    editorRef.current?.view?.dispatch({ effects: setRemoteCursors.of(remoteCursors ?? []) });
+  }, [remoteCursors]);
+
+  // Stable across re-renders — only recreated if onCursorMove's identity
+  // actually changes (it shouldn't, if the caller wraps it in useCallback).
+  const cursorReporter = useMemo(
+    () =>
+      EditorView.updateListener.of((update) => {
+        if (update.selectionSet && onCursorMove) {
+          onCursorMove(update.state.selection.main.head);
+        }
+      }),
+    [onCursorMove]
+  );
+
+  // THE FIX: this used to be an inline array literal rebuilt every render,
+  // which made @uiw/react-codemirror treat every render as "extensions
+  // changed" and fully reconfigure the EditorState — wiping StateFields
+  // like remoteCursorsField and lineAuthorsField back to their initial
+  // value. Memoizing it means the editor only actually reconfigures when
+  // language or the cursor listener genuinely changes, not on every
+  // document refetch / unrelated parent re-render.
+  const extensions: Extension[] = useMemo(
+    () => [stexLanguage, blameExtension, cursorExtension, cursorReporter],
+    [cursorReporter]
+  );
+
   return (
     <CodeMirror
       ref={editorRef}
       value={value}
       height="100%"
-      extensions={[StreamLanguage.define(stex), blameExtension]}
+      editable={!readOnly}
+      extensions={extensions}
       onChange={onChange}
       style={{ height: "100%" }}
     />
@@ -2307,6 +2495,7 @@ export function PdfPreview({ pdfUrl }: PdfPreviewProps) {
 ## src/features/redaction/components/redactionPage.tsx
 
 ```tsx
+import { useCallback,  useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Editor } from "./editor";
@@ -2320,10 +2509,13 @@ import { useUpdateDocumentTitle } from "../hooks/useUpdateDocumentTitle";
 import { useDocumentSocket } from "../hooks/useDocumentSocket";
 import { documentQueryOptions, duplicateDocument } from "../api/redaction";
 import { useRedactionStore } from "../store/redactionStore";
+import { useCurrentUser } from "#/features/auth";
 
 interface RedactionPageProps {
   documentId: string;
 }
+
+const CURSOR_THROTTLE_MS = 80;
 
 export function RedactionPage({ documentId }: RedactionPageProps) {
   const navigate = useNavigate();
@@ -2340,26 +2532,26 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
     (state) => state.activeFiles[documentId] ?? document?.files[0]?.id ?? null
   );
   const dialogState = useRedactionStore((state) => state.dialogs[documentId]);
+  const dirtyCount = useRedactionStore((state) => state.dirtyFiles[documentId]?.size ?? 0);
 
   const setActiveTab = useRedactionStore((state) => state.setActiveTab);
   const setActiveFileId = useRedactionStore((state) => state.setActiveFile);
   const setDialog = useRedactionStore((state) => state.setDialog);
-
-  const dirtyCount = useRedactionStore(
-    (state) => state.dirtyFiles[documentId]?.size ?? 0
-  );
   const markFileDirty = useRedactionStore((state) => state.markFileDirty);
 
+  const { data: currentUser } = useCurrentUser();
 
   // Live sockets & refresh trigger
-  const { presenceByFile, setActiveFile: setSocketActiveFile } = useDocumentSocket(
-    documentId,
-    (event) => {
-      if (event.phase) {
-        queryClient.invalidateQueries({ queryKey: ["document", documentId] });
-      }
+  const {
+    presenceByFile,
+    remoteCursorsByFile,
+    setActiveFile: setSocketActiveFile,
+    sendCursor,
+  } = useDocumentSocket(documentId, currentUser?.id, (event) => {
+    if (event.phase) {
+      queryClient.invalidateQueries({ queryKey: ["document", documentId] });
     }
-  );
+  });
 
   const {
     compile,
@@ -2383,11 +2575,45 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
     },
   });
 
-  if (!document) return null;
-
-  const files = document.files;
+  const files = document?.files ?? [];
   const currentTabId = activeTabId || activeFileId || files[0]?.id || "";
   const activeFile = files.find((f) => f.id === currentTabId || f.id === activeFileId);
+
+  // Throttled cursor sender — recreated only when the target file changes,
+  // so rapid selection events within a file share one throttle window
+  // instead of resetting it on every keystroke.
+  const lastSentRef = useRef(0);
+  const pendingRef = useRef<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleCursorMove = useCallback(
+    (pos: number) => {
+      if (!currentTabId || currentTabId === PREVIEW_TAB_ID || currentTabId === LOG_TAB_ID) return;
+
+      const now = Date.now();
+      const elapsed = now - lastSentRef.current;
+
+      if (elapsed >= CURSOR_THROTTLE_MS) {
+        lastSentRef.current = now;
+        sendCursor(currentTabId, pos);
+      } else {
+        pendingRef.current = pos;
+        if (!timerRef.current) {
+          timerRef.current = setTimeout(() => {
+            timerRef.current = null;
+            if (pendingRef.current !== null) {
+              lastSentRef.current = Date.now();
+              sendCursor(currentTabId, pendingRef.current);
+              pendingRef.current = null;
+            }
+          }, CURSOR_THROTTLE_MS - elapsed);
+        }
+      }
+    },
+    [currentTabId, sendCursor]
+  );
+
+  if (!document) return null;
 
   const updateActiveFileContent = (content: string) => {
     const fileId = activeFileId ?? files[0]?.id;
@@ -2453,6 +2679,8 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
             language={activeFile.language}
             onChange={updateActiveFileContent}
             lineAuthors={activeFile.lineAuthors}
+            remoteCursors={remoteCursorsByFile[currentTabId]}
+            onCursorMove={handleCursorMove}
           />
         ) : null}
       </div>
@@ -2764,6 +2992,7 @@ export function useCompileDocument(
 
 ```ts
 import { useEffect, useRef, useState } from "react";
+import type { RemoteCursor } from "../components/cursorExtension";
 
 interface PresenceUser {
   fileId: string;
@@ -2772,8 +3001,27 @@ interface PresenceUser {
   lastSeen: number;
 }
 
+interface CursorUser {
+  fileId: string;
+  name: string;
+  email: string;
+  pos: number;
+  lastSeen: number;
+}
+
 const PRESENCE_INTERVAL_MS = 4000;
 const STALE_AFTER_MS = 12000;
+const CURSOR_STALE_AFTER_MS = 8000;
+
+const RECONNECT_BASE_DELAY_MS = 1000;
+const RECONNECT_MAX_DELAY_MS = 15000;
+
+const AVATAR_COLORS = ["#4dabf7", "#9775fa", "#20c997", "#ff922b", "#f06595", "#748ffc"];
+function colorFor(key: string) {
+  let hash = 0;
+  for (const ch of key) hash = (hash * 31 + ch.charCodeAt(0)) % AVATAR_COLORS.length;
+  return AVATAR_COLORS[hash];
+}
 
 function resolveWsBase(): string {
   const httpBase = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
@@ -2788,64 +3036,163 @@ function buildPresenceMap(users: Map<string, PresenceUser>) {
   return map;
 }
 
+function buildCursorMap(cursors: Map<string, CursorUser>, selfUserId: string | null) {
+  const map: Record<string, RemoteCursor[]> = {};
+  for (const [userId, c] of cursors) {
+    if (userId === selfUserId) continue;
+    (map[c.fileId] ??= []).push({
+      userId,
+      name: c.name,
+      color: colorFor(c.email ?? userId),
+      pos: c.pos,
+    });
+  }
+  return map;
+}
+
+export type ConnectionStatus = "connecting" | "open" | "reconnecting" | "closed";
+
 export function useDocumentSocket(documentId: string, onCompileUpdate: (event: any) => void) {
   const [presenceByFile, setPresenceByFile] = useState<Record<string, any[]>>({});
+  const [remoteCursorsByFile, setRemoteCursorsByFile] = useState<Record<string, RemoteCursor[]>>({});
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("connecting");
+
   const wsRef = useRef<WebSocket | null>(null);
   const activeFileRef = useRef<string | null>(null);
   const usersRef = useRef<Map<string, PresenceUser>>(new Map());
+  const cursorsRef = useRef<Map<string, CursorUser>>(new Map());
+  const selfUserIdRef = useRef<string | null>(null);
+
+  const reconnectAttemptRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const unmountedRef = useRef(false);
+
   const onCompileUpdateRef = useRef(onCompileUpdate);
   onCompileUpdateRef.current = onCompileUpdate;
 
   useEffect(() => {
-    const url = `${resolveWsBase()}/api/texademia/ws/documents/${documentId}`;
-    console.log("[ws] connecting to", url);
-    const socket = new WebSocket(url);
-    wsRef.current = socket;
-
-    socket.onopen = () => console.log("[ws] open");
-    socket.onclose = (e) => console.log("[ws] closed", e.code, e.reason);
-    socket.onerror = (e) => console.log("[ws] error", e);
+    unmountedRef.current = false;
 
     const heartbeat = setInterval(() => {
-      console.log("[ws] readyState:", socket.readyState, "activeFile:", activeFileRef.current);
-      if (socket.readyState === WebSocket.OPEN && activeFileRef.current) {
+      const socket = wsRef.current;
+      if (socket?.readyState === WebSocket.OPEN && activeFileRef.current) {
         socket.send(JSON.stringify({ type: "presence", fileId: activeFileRef.current }));
       }
     }, PRESENCE_INTERVAL_MS);
 
     const sweep = setInterval(() => {
       const now = Date.now();
-      let changed = false;
+      let presenceChanged = false;
       for (const [userId, u] of usersRef.current) {
         if (now - u.lastSeen > STALE_AFTER_MS) {
           usersRef.current.delete(userId);
-          changed = true;
+          presenceChanged = true;
         }
       }
-      if (changed) setPresenceByFile(buildPresenceMap(usersRef.current));
+      if (presenceChanged) setPresenceByFile(buildPresenceMap(usersRef.current));
+
+      let cursorsChanged = false;
+      for (const [userId, c] of cursorsRef.current) {
+        if (now - c.lastSeen > CURSOR_STALE_AFTER_MS) {
+          cursorsRef.current.delete(userId);
+          cursorsChanged = true;
+        }
+      }
+      if (cursorsChanged) {
+        setRemoteCursorsByFile(buildCursorMap(cursorsRef.current, selfUserIdRef.current));
+      }
     }, 3000);
 
-    socket.onmessage = (event) => {
-      console.log("[ws] message received:", event.data);
-      const payload = JSON.parse(event.data);
-      if (payload.type === "presence") {
-        usersRef.current.set(payload.userId, {
-          fileId: payload.fileId,
-          name: payload.name,
-          email: payload.email,
-          lastSeen: Date.now(),
-        });
-        setPresenceByFile(buildPresenceMap(usersRef.current));
-      } else if (payload.type === "compile:update") {
-        onCompileUpdateRef.current(payload);
-      }
-    };
+    function connect() {
+      if (unmountedRef.current) return;
+
+      const url = `${resolveWsBase()}/api/texademia/ws/documents/${documentId}`;
+      console.log("[ws] connecting to", url, "attempt", reconnectAttemptRef.current);
+      setConnectionStatus(reconnectAttemptRef.current === 0 ? "connecting" : "reconnecting");
+
+      const socket = new WebSocket(url);
+      wsRef.current = socket;
+
+      socket.onopen = () => {
+        console.log("[ws] open");
+        reconnectAttemptRef.current = 0;
+        setConnectionStatus("open");
+
+        // Rejoin state that lived only in memory: tell the server (and thus
+        // other collaborators) which file we're on again, since a stale
+        // connection means everyone else's view of us just went silent.
+        if (activeFileRef.current) {
+          socket.send(JSON.stringify({ type: "presence", fileId: activeFileRef.current }));
+        }
+      };
+
+      socket.onclose = (e) => {
+        console.log("[ws] closed", e.code, e.reason);
+        if (unmountedRef.current) return;
+
+        setConnectionStatus("reconnecting");
+
+        // Stale presence/cursors from before the drop are misleading once
+        // we're disconnected — clear them rather than show frozen ghosts.
+        usersRef.current.clear();
+        cursorsRef.current.clear();
+        setPresenceByFile({});
+        setRemoteCursorsByFile({});
+
+        const attempt = reconnectAttemptRef.current;
+        const delay = Math.min(
+          RECONNECT_BASE_DELAY_MS * 2 ** attempt,
+          RECONNECT_MAX_DELAY_MS
+        );
+        reconnectAttemptRef.current = attempt + 1;
+
+        console.log(`[ws] reconnecting in ${delay}ms`);
+        reconnectTimerRef.current = setTimeout(connect, delay);
+      };
+
+      socket.onerror = (e) => {
+        console.log("[ws] error", e);
+        // onclose fires right after onerror for a failed connection —
+        // no separate reconnect scheduling needed here.
+      };
+
+      socket.onmessage = (event) => {
+        const payload = JSON.parse(event.data);
+
+        if (payload.type === "presence") {
+          selfUserIdRef.current = selfUserIdRef.current; // unchanged, see note below
+          usersRef.current.set(payload.userId, {
+            fileId: payload.fileId,
+            name: payload.name,
+            email: payload.email,
+            lastSeen: Date.now(),
+          });
+          setPresenceByFile(buildPresenceMap(usersRef.current));
+        } else if (payload.type === "cursor") {
+          cursorsRef.current.set(payload.userId, {
+            fileId: payload.fileId,
+            name: payload.name,
+            email: payload.email,
+            pos: payload.pos,
+            lastSeen: Date.now(),
+          });
+          setRemoteCursorsByFile(buildCursorMap(cursorsRef.current, selfUserIdRef.current));
+        } else if (payload.type === "ping") {
+          socket.send(JSON.stringify({ type: "pong" }));
+        } else if (payload.type === "compile:update") {
+          onCompileUpdateRef.current(payload);
+        }
+      };
+    }
+
+    connect();
 
     return () => {
-      console.log("[ws] effect cleanup — closing socket, readyState was", socket.readyState);
+      unmountedRef.current = true;
       clearInterval(heartbeat);
       clearInterval(sweep);
-      socket.close();
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      wsRef.current?.close();
     };
   }, [documentId]);
 
@@ -2856,7 +3203,13 @@ export function useDocumentSocket(documentId: string, onCompileUpdate: (event: a
     }
   };
 
-  return { presenceByFile, setActiveFile };
+  const sendCursor = (fileId: string, pos: number) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "cursor", fileId, pos }));
+    }
+  };
+
+  return { presenceByFile, remoteCursorsByFile, connectionStatus, setActiveFile, sendCursor };
 }
 
 ```
@@ -3923,10 +4276,11 @@ export function AppShell({ children }: AppShellProps) {
       padding={0}
       styles={{
         main: {
-          backgroundColor: "var(--color-bg)",
-          height: "calc(100dvh - 56px)",
-          overflow: "hidden",
-        },
+            backgroundColor: "var(--color-bg)",
+            minHeight: "calc(100dvh - 56px)",
+            overflowY: "auto",
+            overflowX: "hidden",
+          },
         header: {
           backgroundColor: "var(--color-surface)",
           borderBottom: "1px solid var(--color-border)",
