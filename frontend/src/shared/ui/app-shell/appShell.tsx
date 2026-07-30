@@ -13,10 +13,11 @@ export function AppShell({ children }: AppShellProps) {
       padding={0}
       styles={{
         main: {
-          backgroundColor: "var(--color-bg)",
-          height: "calc(100dvh - 56px)",
-          overflow: "hidden",
-        },
+            backgroundColor: "var(--color-bg)",
+            minHeight: "calc(100dvh - 56px)",
+            overflowY: "auto",
+            overflowX: "hidden",
+          },
         header: {
           backgroundColor: "var(--color-surface)",
           borderBottom: "1px solid var(--color-border)",

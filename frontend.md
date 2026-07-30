@@ -32,6 +32,7 @@ frontend
 │   │       │   ├── collaboratorsDialog.tsx
 │   │       │   ├── compileButton.tsx
 │   │       │   ├── createDocumentDialog.tsx
+│   │       │   ├── cursorExtension.ts
 │   │       │   ├── documentHeader.tsx
 │   │       │   ├── documentMenu.tsx
 │   │       │   ├── documentsListPage.module.css
@@ -1143,6 +1144,87 @@ export function CreateDocumentDialog({
     </Modal>
   );
 }
+
+```
+
+
+## src/features/redaction/components/cursorExtension.ts
+
+```ts
+import { StateField, StateEffect } from "@codemirror/state";
+import { EditorView, Decoration, WidgetType, type DecorationSet } from "@codemirror/view";
+
+export interface RemoteCursor {
+  userId: string;
+  name: string;
+  color: string;
+  pos: number; // character offset in the doc
+}
+
+export const setRemoteCursors = StateEffect.define<RemoteCursor[]>();
+
+export const remoteCursorsField = StateField.define<RemoteCursor[]>({
+  create: () => [],
+  update(value, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setRemoteCursors)) return effect.value;
+    }
+    // map positions through local edits so cursors don't drift on your own typing
+    return value.map((c) => ({ ...c, pos: tr.changes.mapPos(c.pos) }));
+  },
+});
+
+class CursorWidget extends WidgetType {
+  constructor(private name: string, private color: string) {
+    super();
+  }
+  eq(other: CursorWidget) {
+    return other.name === this.name && other.color === this.color;
+  }
+  toDOM() {
+    const wrap = document.createElement("span");
+    wrap.style.position = "relative";
+    wrap.style.borderLeft = `2px solid ${this.color}`;
+    wrap.style.marginLeft = "-1px";
+
+    const label = document.createElement("span");
+    label.textContent = this.name;
+    Object.assign(label.style, {
+      position: "absolute",
+      top: "-1.2em",
+      left: "0",
+      fontSize: "0.7em",
+      padding: "1px 4px",
+      borderRadius: "3px",
+      whiteSpace: "nowrap",
+      color: "#fff",
+      background: this.color,
+      pointerEvents: "none",
+    });
+    wrap.appendChild(label);
+    return wrap;
+  }
+  ignoreEvent() {
+    return true;
+  }
+}
+
+function buildCursorDecorations(cursors: RemoteCursor[]): DecorationSet {
+  if (!cursors.length) return Decoration.none;
+  const sorted = [...cursors].sort((a, b) => a.pos - b.pos);
+  return Decoration.set(
+    sorted.map((c) =>
+      Decoration.widget({ widget: new CursorWidget(c.name, c.color), side: 1 }).range(c.pos)
+    )
+  );
+}
+
+export const remoteCursorsPlugin = EditorView.decorations.compute(
+  [remoteCursorsField],
+  (state) => buildCursorDecorations(state.field(remoteCursorsField))
+);
+
+export const cursorExtension = [remoteCursorsField, remoteCursorsPlugin];
 
 ```
 
@@ -2263,6 +2345,12 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
   const setActiveFileId = useRedactionStore((state) => state.setActiveFile);
   const setDialog = useRedactionStore((state) => state.setDialog);
 
+  const dirtyCount = useRedactionStore(
+    (state) => state.dirtyFiles[documentId]?.size ?? 0
+  );
+  const markFileDirty = useRedactionStore((state) => state.markFileDirty);
+
+
   // Live sockets & refresh trigger
   const { presenceByFile, setActiveFile: setSocketActiveFile } = useDocumentSocket(
     documentId,
@@ -2302,6 +2390,9 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
   const activeFile = files.find((f) => f.id === currentTabId || f.id === activeFileId);
 
   const updateActiveFileContent = (content: string) => {
+    const fileId = activeFileId ?? files[0]?.id;
+    if (fileId) markFileDirty(documentId, fileId);
+
     queryClient.setQueryData(documentQueryOptions(documentId).queryKey, (oldData) => {
       if (!oldData) return oldData;
       return {
@@ -2337,7 +2428,7 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
         compileLog={compileLog}
         template={document.template}
         pdfUrl={pdfUrl}
-        dirtyCount={0}
+        dirtyCount={dirtyCount}
         onDuplicateClick={() => setDialog(documentId, "duplicate", true)}
         onShareClick={() => setDialog(documentId, "collaborators", true)}
         role={document.role}
@@ -2592,6 +2683,7 @@ export function useCompileDocument(
       // Handle side-effects cleanly inside the query callback when the job finishes
       if (data?.status === "done" && jobId) {
         setActiveTab(documentId, PREVIEW_TAB_ID);
+        useRedactionStore.getState().clearDirty(documentId);
         setJobId(null);
         return false;
       }
@@ -2924,25 +3016,29 @@ export const useHeaderStore = create<HeaderState>((set, get) => ({
 ## src/features/redaction/store/redactionStore.ts
 
 ```ts
-// redaction/stores/useRedactionStore.ts
+// src/features/redaction/store/redactionStore.ts
 import { create } from "zustand";
 
 interface RedactionUIStore {
-  // Keyed by documentId so tab/dialog selections are isolated per document
   activeTabs: Record<string, string>;
   activeFiles: Record<string, string>;
   dialogs: Record<string, { duplicate?: boolean; collaborators?: boolean }>;
+  dirtyFiles: Record<string, Set<string>>;
 
   setActiveTab: (documentId: string, tabId: string) => void;
   setActiveFile: (documentId: string, fileId: string) => void;
   setDialog: (documentId: string, dialog: "duplicate" | "collaborators", open: boolean) => void;
+  markFileDirty: (documentId: string, fileId: string) => void;
+  clearDirty: (documentId: string) => void;
 }
 
 export const useRedactionStore = create<RedactionUIStore>((set) => ({
   activeTabs: {},
   activeFiles: {},
   dialogs: {},
+  dirtyFiles: {},
 
+  // Actual function implementations (comma-separated, no type signatures here)
   setActiveTab: (documentId, tabId) =>
     set((state) => ({
       activeTabs: { ...state.activeTabs, [documentId]: tabId },
@@ -2959,6 +3055,20 @@ export const useRedactionStore = create<RedactionUIStore>((set) => ({
         ...state.dialogs,
         [documentId]: { ...state.dialogs[documentId], [dialog]: open },
       },
+    })),
+
+  markFileDirty: (documentId, fileId) =>
+    set((state) => {
+      const current = state.dirtyFiles[documentId] ?? new Set<string>();
+      if (current.has(fileId)) return state;
+      const next = new Set(current);
+      next.add(fileId);
+      return { dirtyFiles: { ...state.dirtyFiles, [documentId]: next } };
+    }),
+
+  clearDirty: (documentId) =>
+    set((state) => ({
+      dirtyFiles: { ...state.dirtyFiles, [documentId]: new Set() },
     })),
 }));
 

@@ -11,6 +11,7 @@ import {
   useReactTable,
   type SortingState,
 } from "@tanstack/react-table";
+import { useMediaQuery } from "@mantine/hooks";
 import {
   ActionIcon,
   Indicator,
@@ -19,6 +20,7 @@ import {
   Box,
   Button,
   Group,
+  Menu,
   Modal,
   Pagination,
   Stack,
@@ -33,6 +35,7 @@ import {
   IconChevronUp,
   IconCopy,
   IconCrown,
+  IconDotsVertical,
   IconDownload,
   IconFileText,
   IconPlus,
@@ -74,6 +77,10 @@ export function DocumentsListPage() {
   const [collaboratorsTarget, setCollaboratorsTarget] = useState<RedactionDocument | null>(null); // NEW
   const [globalFilter, setGlobalFilter] = useState("");
   const [sorting, setSorting] = useState<SortingState>([{ id: "updatedAt", desc: true }]);
+
+  // Collapse the per-row action icons into a single "⋮" menu once the
+  // viewport gets tight (matches the mantine-breakpoint-md var: 62em).
+  const isCompact = useMediaQuery("(max-width: 62em)");
 
   const { mutate: createNew, isPending: isCreating } = useMutation({
     mutationFn: ({ title, template }: { title: string; template: string }) =>
@@ -138,59 +145,59 @@ export function DocumentsListPage() {
         },
       }),
       columnHelper.display({
-              id: "collaborators",
-              header: "Access",
-              cell: (info) => {
-                const doc = info.row.original;
-                const others = doc.collaborators ?? [];
+        id: "collaborators",
+        header: "Access",
+        cell: (info) => {
+          const doc = info.row.original;
+          const others = doc.collaborators ?? [];
 
-                if (others.length === 0) {
-                  return (
-                    <Text size="xs" c="dimmed" ta="center">
-                      Only you
-                    </Text>
-                  );
-                }
+          if (others.length === 0) {
+            return (
+              <Text size="xs" c="dimmed" ta="center">
+                Only you
+              </Text>
+            );
+          }
 
-                return (
-                  <Group gap={6} wrap="nowrap">
-                    {others.slice(0, 4).map((c) => (
-                      <Tooltip
-                        key={c.id}
-                        label={`${c.email} · ${c.role === "writer" ? "Can edit" : "Can view"}${
-                          c.status === "pending" ? " (invitation pending)" : ""
-                        }`}
-                      >
-                        <Indicator
-                          disabled={c.status !== "pending"}
-                          size={14}
-                          color="var(--color-warning)"
-                          offset={3}
-                          position="bottom-end"
-                          label={<IconClock size={9} />}
-                          styles={{ indicator: { padding: 0 } }}
-                        >
-                          <Avatar
-                            radius="xl"
-                            size={28}
-                            color={c.status === "pending" ? "gray" : "accent"}
-                            variant={c.status === "pending" ? "light" : "filled"}
-                          >
-                            {c.email.slice(0, 2).toUpperCase()}
-                          </Avatar>
-                        </Indicator>
-                      </Tooltip>
-                    ))}
-                    {others.length > 4 && (
-                      <Avatar radius="xl" size={28}>
-                        +{others.length - 4}
-                      </Avatar>
-                    )}
-                  </Group>
-                );
-              },
-              enableSorting: false,
-            }),
+          return (
+            <Group gap={6} wrap="nowrap">
+              {others.slice(0, 4).map((c) => (
+                <Tooltip
+                  key={c.id}
+                  label={`${c.email} · ${c.role === "writer" ? "Can edit" : "Can view"}${
+                    c.status === "pending" ? " (invitation pending)" : ""
+                  }`}
+                >
+                  <Indicator
+                    disabled={c.status !== "pending"}
+                    size={14}
+                    color="var(--color-warning)"
+                    offset={3}
+                    position="bottom-end"
+                    label={<IconClock size={9} />}
+                    styles={{ indicator: { padding: 0 } }}
+                  >
+                    <Avatar
+                      radius="xl"
+                      size={28}
+                      color={c.status === "pending" ? "gray" : "accent"}
+                      variant={c.status === "pending" ? "light" : "filled"}
+                    >
+                      {c.email.slice(0, 2).toUpperCase()}
+                    </Avatar>
+                  </Indicator>
+                </Tooltip>
+              ))}
+              {others.length > 4 && (
+                <Avatar radius="xl" size={28}>
+                  +{others.length - 4}
+                </Avatar>
+              )}
+            </Group>
+          );
+        },
+        enableSorting: false,
+      }),
       columnHelper.accessor("updatedAt", {
         header: "Last Modified",
         cell: (info) => (
@@ -218,6 +225,65 @@ export function DocumentsListPage() {
         header: "Actions",
         cell: (info) => {
           const doc = info.row.original;
+
+          // Narrow screens: collapse everything into a single menu button
+          // so the column never has to squeeze 3-4 icons into a tiny cell.
+          if (isCompact) {
+            return (
+              <Box
+                h="100%"
+                mih={40}
+                style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+              >
+                <Menu shadow="md" width={190} position="bottom-end" withinPortal>
+                  <Menu.Target>
+                    <ActionIcon
+                      variant="subtle"
+                      color="gray"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <IconDotsVertical size={15} />
+                    </ActionIcon>
+                  </Menu.Target>
+                  <Menu.Dropdown onClick={(e) => e.stopPropagation()}>
+                    {doc.role === "owner" && (
+                      <Menu.Item
+                        leftSection={<IconUsers size={14} />}
+                        onClick={() => setCollaboratorsTarget(doc)}
+                      >
+                        Share
+                      </Menu.Item>
+                    )}
+                    <Menu.Item
+                      leftSection={<IconCopy size={14} />}
+                      onClick={() => setDuplicateTarget(doc)}
+                    >
+                      Duplicate
+                    </Menu.Item>
+                    <Menu.Item
+                      leftSection={<IconDownload size={14} />}
+                      disabled={!doc.pdfUrl}
+                      component="a"
+                      href={doc.pdfUrl ?? undefined}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {doc.pdfUrl ? "Download PDF" : "Compile first"}
+                    </Menu.Item>
+                    <Menu.Divider />
+                    <Menu.Item
+                      leftSection={<IconTrash size={14} />}
+                      color="red"
+                      onClick={() => setDeleteTarget(doc)}
+                    >
+                      Delete
+                    </Menu.Item>
+                  </Menu.Dropdown>
+                </Menu>
+              </Box>
+            );
+          }
+
           return (
             <Box className={classes.actionsCell} h="100%" mih={40}>
               <div className={classes.overlay}>
@@ -231,7 +297,7 @@ export function DocumentsListPage() {
                         setCollaboratorsTarget(doc);
                       }}
                     >
-                      <IconUsers size={16} />
+                      <IconUsers size={15} />
                     </ActionIcon>
                   </Tooltip>
                 )}
@@ -244,7 +310,7 @@ export function DocumentsListPage() {
                       setDuplicateTarget(doc);
                     }}
                   >
-                    <IconCopy size={16} />
+                    <IconCopy size={15} />
                   </ActionIcon>
                 </Tooltip>
                 <Tooltip label={doc.pdfUrl ? "Download PDF" : "Compile first"}>
@@ -257,8 +323,18 @@ export function DocumentsListPage() {
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
+                    styles={{
+                      root: {
+                        backgroundColor: "transparent",
+                        "&[data-disabled]": {
+                          backgroundColor: "transparent",
+                          color: "var(--color-text-muted)",
+                          opacity: 0.5,
+                        },
+                      },
+                    }}
                   >
-                    <IconDownload size={16} />
+                    <IconDownload size={15} />
                   </ActionIcon>
                 </Tooltip>
                 <Tooltip label="Delete">
@@ -270,7 +346,7 @@ export function DocumentsListPage() {
                       setDeleteTarget(doc);
                     }}
                   >
-                    <IconTrash size={16} />
+                    <IconTrash size={15} />
                   </ActionIcon>
                 </Tooltip>
               </div>
@@ -280,7 +356,7 @@ export function DocumentsListPage() {
         enableSorting: false,
       }),
     ],
-    []
+    [isCompact]
   );
 
   const table = useReactTable({
@@ -304,7 +380,7 @@ export function DocumentsListPage() {
   const to = Math.min(from + table.getState().pagination.pageSize - 1, total);
 
   return (
-    <Stack p="xl" gap="lg">
+    <Stack p={{ base: "md", sm: "xl" }} gap="lg">
       <Group justify="space-between" align="flex-end">
         <Stack gap={2}>
           <Text ff="monospace" fz={11} c="dimmed" tt="uppercase" style={{ letterSpacing: "0.2em" }}>
@@ -314,14 +390,14 @@ export function DocumentsListPage() {
             Your Library
           </Title>
         </Stack>
-        <Button leftSection={<IconPlus size={16} />} onClick={() => setDialogOpened(true)}>
+        <Button leftSection={<IconPlus size={15} />} onClick={() => setDialogOpened(true)}>
           New document
         </Button>
       </Group>
 
       <TextInput
         placeholder="Search documents…"
-        leftSection={<IconSearch size={16} />}
+        leftSection={<IconSearch size={15} />}
         value={globalFilter}
         onChange={(e) => setGlobalFilter(e.currentTarget.value)}
         maw={360}
@@ -334,62 +410,92 @@ export function DocumentsListPage() {
           overflow: "hidden",
         }}
       >
-        <Table withColumnBorders highlightOnHover verticalSpacing="md" horizontalSpacing="lg">
-          <Table.Thead bg="gray.0">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <Table.Tr key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <Table.Th
-                    key={header.id}
-                    onClick={header.column.getToggleSortingHandler()}
-                    style={{ cursor: header.column.getCanSort() ? "pointer" : "default" }}
-                  >
-                    <Group gap={4} wrap="nowrap">
-                      <Text
-                        ff="monospace"
-                        fz={11}
-                        fw={700}
-                        tt="uppercase"
-                        c="dimmed"
-                        style={{ letterSpacing: "0.08em" }}
-                      >
-                        {flexRender(header.column.columnDef.header, header.getContext())}
-                      </Text>
-                      {header.column.getIsSorted() === "asc" && <IconChevronUp size={12} />}
-                      {header.column.getIsSorted() === "desc" && <IconChevronDown size={12} />}
-                    </Group>
-                  </Table.Th>
-                ))}
-              </Table.Tr>
-            ))}
-          </Table.Thead>
-          <Table.Tbody>
-            {rows.map((row) => (
-              <Table.Tr
-                key={row.id}
-                className={classes.row}
-                onClick={() =>
-                  navigate({ to: "/redaction/$documentId", params: { documentId: row.original.id } })
-                }
-              >
-                {row.getVisibleCells().map((cell) => (
-                  <Table.Td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</Table.Td>
-                ))}
-              </Table.Tr>
-            ))}
-            {rows.length === 0 && !isLoading && (
-              <Table.Tr>
-                <Table.Td colSpan={columns.length}>
-                  <Text c="dimmed" ta="center" py="lg">
-                    {globalFilter ? "No documents match your search." : "No documents yet — create one to get started."}
-                  </Text>
-                </Table.Td>
-              </Table.Tr>
-            )}
-          </Table.Tbody>
-        </Table>
+        {/* Only the table itself scrolls horizontally — the footer below
+            stays put so the pagination controls are always visible. */}
+        <Box style={{ overflowX: "auto" }}>
+          <Table
+            withColumnBorders
+            highlightOnHover
+            verticalSpacing="md"
+            horizontalSpacing="lg"
+            miw={720}
+            style={{ tableLayout: "fixed" }}
+          >
+            <Table.Thead bg="gray.0">
+              {table.getHeaderGroups().map((headerGroup) => (
+                <Table.Tr key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <Table.Th
+                      key={header.id}
+                      onClick={header.column.getToggleSortingHandler()}
+                      style={{
+                        cursor: header.column.getCanSort() ? "pointer" : "default",
+                        ...(header.id === "actions"
+                          ? { width: isCompact ? 56 : 150, textAlign: "center" }
+                          : {}),
+                      }}
+                    >
+                      <Group gap={4} wrap="nowrap" justify={header.id === "actions" ? "center" : "flex-start"}>
+                        <Text
+                          ff="monospace"
+                          fz={11}
+                          fw={700}
+                          tt="uppercase"
+                          c="dimmed"
+                          style={{ letterSpacing: "0.08em" }}
+                        >
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                        </Text>
+                        {header.column.getIsSorted() === "asc" && <IconChevronUp size={12} />}
+                        {header.column.getIsSorted() === "desc" && <IconChevronDown size={12} />}
+                      </Group>
+                    </Table.Th>
+                  ))}
+                </Table.Tr>
+              ))}
+            </Table.Thead>
+            <Table.Tbody>
+              {rows.map((row) => (
+                <Table.Tr
+                  key={row.id}
+                  className={classes.row}
+                  onClick={() =>
+                    navigate({ to: "/redaction/$documentId", params: { documentId: row.original.id } })
+                  }
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <Table.Td
+                      key={cell.id}
+                      style={
+                        cell.column.id === "actions" ? { width: isCompact ? 56 : 150 } : undefined
+                      }
+                    >
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </Table.Td>
+                  ))}
+                </Table.Tr>
+              ))}
+              {rows.length === 0 && !isLoading && (
+                <Table.Tr>
+                  <Table.Td colSpan={columns.length}>
+                    <Text c="dimmed" ta="center" py="lg">
+                      {globalFilter ? "No documents match your search." : "No documents yet — create one to get started."}
+                    </Text>
+                  </Table.Td>
+                </Table.Tr>
+              )}
+            </Table.Tbody>
+          </Table>
+        </Box>
 
-        <Group justify="space-between" p="md" bg="gray.0" style={{ borderTop: "1px solid var(--mantine-color-gray-3)" }}>
+        <Group
+          justify="space-between"
+          p="md"
+          bg="gray.0"
+          wrap="wrap"
+          gap="sm"
+          style={{ borderTop: "1px solid var(--mantine-color-gray-3)" }}
+        >
           <Text ff="monospace" fz={11} c="dimmed">
             {total === 0 ? "NO RESULTS" : `SHOWING ${from} TO ${to} OF ${total} RESULTS`}
           </Text>

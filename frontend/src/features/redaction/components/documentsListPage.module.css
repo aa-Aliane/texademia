@@ -1,6 +1,7 @@
 .actionsCell {
   position: relative;
   overflow: hidden;
+  padding-inline: 8px;
 }
 
 .overlay {
@@ -9,11 +10,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 6px;
+  padding-inline: 8px;
 
   transition: opacity 120ms ease;
   z-index: 900;
-
 }
 
 .actionsCell:hover .overlay {
@@ -22,4 +23,11 @@
 
 .row {
   cursor: pointer;
+}
+
+.actionsCell {
+  position: relative;
+  overflow: hidden;
+  padding-inline: 6px;
+  min-width: 120px; /* NEW */
 }
