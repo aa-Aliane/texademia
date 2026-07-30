@@ -13,6 +13,31 @@ if TYPE_CHECKING:
 _COMPILED_PDF_DIR = Path("compiled_pdfs")
 
 
+class VersionTrigger(str, enum.Enum):
+    compile = "compile"
+    idle = "idle"
+    restore = "restore"
+
+
+class DocumentFileVersion(SQLModel, table=True):
+    __tablename__ = "document_file_versions"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    file_id: uuid.UUID = Field(
+        foreign_key="document_files.id", nullable=False, index=True
+    )
+    created_at: datetime = Field(
+        default_factory=datetime.utcnow, nullable=False, index=True
+    )
+    trigger: VersionTrigger = Field(default=VersionTrigger.idle, nullable=False)
+    author: str = Field(nullable=False)
+    # diff-match-patch patch text: applying it to the file's CURRENT content
+    # at the time of restore reconstructs the content as it was at this checkpoint.
+    reverse_patch: str = Field(nullable=False)
+
+    file: "DocumentFile" = Relationship(back_populates="versions")
+
+
 class Document(SQLModel, table=True):
     __tablename__ = "documents"
 
