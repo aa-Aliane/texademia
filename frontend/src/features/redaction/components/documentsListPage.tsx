@@ -78,7 +78,10 @@ export function DocumentsListPage() {
   const dialogOpened = useDocumentsUIStore((state) => state.dialogOpened);
   const setDialogOpened = useDocumentsUIStore((state) => state.setDialogOpened)
 
-  const [duplicateTarget, setDuplicateTarget] = useState<RedactionDocument | null>(null);
+  // duplicate target state
+  const duplicateTarget = useDocumentsUIStore((state) => state.duplicateTarget);
+  const setDuplicateTarget = useDocumentsUIStore((state) => state.setDuplicateTarget);
+
   const [deleteTarget, setDeleteTarget] = useState<RedactionDocument | null>(null);
   const [collaboratorsTarget, setCollaboratorsTarget] = useState<RedactionDocument | null>(null); // NEW
   const [globalFilter, setGlobalFilter] = useState("");
