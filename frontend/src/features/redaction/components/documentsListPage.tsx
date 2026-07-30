@@ -93,10 +93,10 @@ export function DocumentsListPage() {
 
 
   // global filter state
-  // const globalFilter = useDocumentsUIStore((state: DocumentsUIStoreState) => state.globalFilter);
-  // const setGlobalFilter = useDocumentsUIStore((state: DocumentsUIStoreState) => state.setGlobalFilter);
+  const globalFilter = useDocumentsUIStore((state: DocumentsUIStoreState) => state.globalFilter);
+  const setGlobalFilter = useDocumentsUIStore((state: DocumentsUIStoreState) => state.setGlobalFilter);
 
-  const [ globalFilter, setGlobalFilter] = useState("");
+  // const [ globalFilter, setGlobalFilter] = useState("");
 
 
   const [sorting, setSorting] = useState<SortingState>([{ id: "updatedAt", desc: true }]);
