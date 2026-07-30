@@ -7,3 +7,4 @@ python-dotenv
 fastapi-users[sqlalchemy]
 redis
 rq
+diff-match-patch
