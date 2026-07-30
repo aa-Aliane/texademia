@@ -329,6 +329,13 @@ async def compile_document(
         document_id, session, user, require_write=True
     )
 
+    for f in document.files:
+        version = create_checkpoint(f, VersionTrigger.compile, user.email)
+        if version:
+            session.add(version)
+            session.add(f)
+    await session.commit()
+
     main_file = next((f for f in document.files if f.name.endswith(".tex")), None)
     print(
         f"[compile] doc={document_id} template={document.template} "
