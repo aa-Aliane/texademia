@@ -2,7 +2,7 @@
 import { create } from "zustand";
 import type { RedactionDocument } from "../types/redaction";
 
-interface DocumentsUIStoreState {
+export interface DocumentsUIStoreState {
   // dialog opend state
   dialogOpened: boolean;
   setDialogOpened: (open: boolean) => void;
@@ -14,6 +14,11 @@ interface DocumentsUIStoreState {
   // delete target state
   deleteTarget: RedactionDocument | null;
   setDeleteTarget: (target: RedactionDocument | null) => void;
+
+  // collaborors target state
+  collaboratorsTarget: RedactionDocument | null;
+  setCollaboratorsTarget: (target: RedactionDocument | null) => void;
+
 }
 
 export const useDocumentsUIStore = create<DocumentsUIStoreState>((set)   => ({
@@ -28,5 +33,9 @@ export const useDocumentsUIStore = create<DocumentsUIStoreState>((set)   => ({
   // delete target state
   deleteTarget: null,
   setDeleteTarget: (target: RedactionDocument | null) => set({ deleteTarget: target }),
+
+  // collaborators target state
+  collaboratorsTarget: null,
+  setCollaboratorsTarget: (target: RedactionDocument | null) => set({ collaboratorsTarget: target }),
 
 }));

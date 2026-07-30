@@ -49,7 +49,7 @@ import { CreateDocumentDialog } from "./createDocumentDialog";
 import { DuplicateDocumentDialog } from "./duplicateDocumentDialog";
 import { CollaboratorsDialog } from "./collaboratorsDialog";
 import { useDocumentsPresence } from "../hooks/useDocumentsPresence";
-import { useDocumentsUIStore } from "../store/documentsStore";
+import { useDocumentsUIStore, type DocumentsUIStoreState } from "../store/documentsStore";
 import type { RedactionDocument } from "../types/redaction";
 import classes from "./documentsListPage.module.css";
 
@@ -75,19 +75,21 @@ export function DocumentsListPage() {
   const queryClient = useQueryClient();
 
   // dialog opened state
-  const dialogOpened = useDocumentsUIStore((state) => state.dialogOpened);
-  const setDialogOpened = useDocumentsUIStore((state) => state.setDialogOpened)
+  const dialogOpened = useDocumentsUIStore((state:DocumentsUIStoreState) => state.dialogOpened);
+  const setDialogOpened = useDocumentsUIStore((state: DocumentsUIStoreState) => state.setDialogOpened)
 
   // duplicate target state
-  const duplicateTarget = useDocumentsUIStore((state) => state.duplicateTarget);
-  const setDuplicateTarget = useDocumentsUIStore((state) => state.setDuplicateTarget);
+  const duplicateTarget = useDocumentsUIStore((state: DocumentsUIStoreState) => state.duplicateTarget);
+  const setDuplicateTarget = useDocumentsUIStore((state: DocumentsUIStoreState) => state.setDuplicateTarget);
 
   // delete target state
-  const deleteTarget = useDocumentsUIStore((state) => state.deleteTarget);
-  const setDeleteTarget = useDocumentsUIStore((state) => state.setDeleteTarget);
+  const deleteTarget = useDocumentsUIStore((state: DocumentsUIStoreState) => state.deleteTarget);
+  const setDeleteTarget = useDocumentsUIStore((state: DocumentsUIStoreState) => state.setDeleteTarget);
+
+  const collaboratorsTarget = useDocumentsUIStore((state: DocumentsUIStoreState) => state.collaboratorsTarget);
+  const setCollaboratorsTarget = useDocumentsUIStore((state: DocumentsUIStoreState) => state.setCollaboratorsTarget)
 
 
-  const [collaboratorsTarget, setCollaboratorsTarget] = useState<RedactionDocument | null>(null); // NEW
   const [globalFilter, setGlobalFilter] = useState("");
   const [sorting, setSorting] = useState<SortingState>([{ id: "updatedAt", desc: true }]);
 
