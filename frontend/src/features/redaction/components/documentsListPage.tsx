@@ -96,10 +96,9 @@ export function DocumentsListPage() {
   const globalFilter = useDocumentsUIStore((state: DocumentsUIStoreState) => state.globalFilter);
   const setGlobalFilter = useDocumentsUIStore((state: DocumentsUIStoreState) => state.setGlobalFilter);
 
-  // const [ globalFilter, setGlobalFilter] = useState("");
-
-
-  const [sorting, setSorting] = useState<SortingState>([{ id: "updatedAt", desc: true }]);
+  // sorting state
+  const sorting = useDocumentsUIStore((state: DocumentsUIStoreState) => state.sorting);
+  const setSorting = useDocumentsUIStore((state: DocumentsUIStoreState) => state.setSorting);
 
   // Collapse the per-row action icons into a single "⋮" menu once the
   // viewport gets tight (matches the mantine-breakpoint-md var: 62em).

@@ -1,6 +1,7 @@
 // src/features/redaction/store/documentsStore.ts
 import { create } from "zustand";
 import type { RedactionDocument } from "../types/redaction";
+import type { SortingState } from "@tanstack/react-table";
 
 export interface DocumentsUIStoreState {
   // dialog opend state
@@ -23,6 +24,10 @@ export interface DocumentsUIStoreState {
   globalFilter: string;
   setGlobalFilter: (filter: string) => void;
 
+  // sorting state
+  sorting: SortingState;
+  setSorting: (sorting: SortingState) => void;
+
 }
 
 export const useDocumentsUIStore = create<DocumentsUIStoreState>((set)   => ({
@@ -44,6 +49,10 @@ export const useDocumentsUIStore = create<DocumentsUIStoreState>((set)   => ({
 
    // global filter state
    globalFilter: "",
-   setGlobalFilter: (filter: string) => set({ globalFilter: filter }),
+  setGlobalFilter: (filter: string) => set({ globalFilter: filter }),
+
+  // sorting state
+  sorting :  [{ id: "updatedAt", desc: true },
+  setSorting: (sorting: SortingState) => set({ sorting }),
 
 }));
