@@ -1,0 +1,50 @@
+texademia_frontend  |       '  sorting: SortingState;\n' +
+texademia_frontend  |       '  setSorting: (sorting: SortingState) => void;\n' +
+texademia_frontend  |       '\n' +
+texademia_frontend  |       '}\n' +
+texademia_frontend  |       '\n' +
+texademia_frontend  |       'export const useDocumentsUIStore = create<DocumentsUIStoreState>((set)   => ({\n' +
+texademia_frontend  |       '  // dialog opend state\n' +
+texademia_frontend  |       '  dialogOpened: false,\n' +
+texademia_frontend  |       '  setDialogOpened: (open: boolean) => set({ dialogOpened: open }),\n' +
+texademia_frontend  |       '\n' +
+texademia_frontend  |       '  // duplicate target state\n' +
+texademia_frontend  |       '  duplicateTarget: null,\n' +
+texademia_frontend  |       '  setDuplicateTarget: (target: RedactionDocument | null) => set({ duplicateTarget: target }),\n' +
+texademia_frontend  |       '\n' +
+texademia_frontend  |       '  // delete target state\n' +
+texademia_frontend  |       '  deleteTarget: null,\n' +
+texademia_frontend  |       '  setDeleteTarget: (target: RedactionDocument | null) => set({ deleteTarget: target }),\n' +
+texademia_frontend  |       '\n' +
+texademia_frontend  |       '  // collaborators target state\n' +
+texademia_frontend  |       '  collaboratorsTarget: null,\n' +
+texademia_frontend  |       '  setCollaboratorsTarget: (target: RedactionDocument | null) => set({ collaboratorsTarget: target }),\n' +
+texademia_frontend  |       '\n' +
+texademia_frontend  |       '   // global filter state\n' +
+texademia_frontend  |       '   globalFilter: "",\n' +
+texademia_frontend  |       '  setGlobalFilter: (filter: string) => set({ globalFilter: filter }),\n' +
+texademia_frontend  |       '\n' +
+texademia_frontend  |       '  // sorting state\n' +
+texademia_frontend  |       '  sorting :  [{ id: "updatedAt", desc: true },\n' +
+texademia_frontend  |       '  setSorting: (sorting: SortingState) => set({ sorting }),\n' +
+texademia_frontend  |       '\n' +
+texademia_frontend  |       '}));\n',
+texademia_frontend  |     runnerError: Error: RunnerError
+texademia_frontend  |         at reviveInvokeError (file:///app/node_modules/vite/dist/node/module-runner.js:550:64)
+texademia_frontend  |         at Object.invoke (file:///app/node_modules/vite/dist/node/module-runner.js:623:11)
+texademia_frontend  |         at async ModuleRunner.getModuleInformation (file:///app/node_modules/vite/dist/node/module-runner.js:1198:7)
+texademia_frontend  |         at async request (file:///app/node_modules/vite/dist/node/module-runner.js:1215:83)
+texademia_frontend  |         at async eval (/app/src/features/redaction/components/documentsListPage.tsx:52:1)
+texademia_frontend  |         at async ESModulesEvaluator.runInlinedModule (file:///app/node_modules/vite/dist/node/module-runner.js:1005:3)
+texademia_frontend  |         at async ModuleRunner.directRequest (file:///app/node_modules/vite/dist/node/module-runner.js:1258:59)
+texademia_frontend  |         at async ModuleRunner.cachedRequest (file:///app/node_modules/vite/dist/node/module-runner.js:1165:73)
+texademia_frontend  |         at async eval (/app/src/features/redaction/index.ts:3:1)
+texademia_frontend  |         at async ESModulesEvaluator.runInlinedModule (file:///app/node_modules/vite/dist/node/module-runner.js:1005:3)
+texademia_frontend  |   },
+texademia_frontend  |   status: 500,
+texademia_frontend  |   statusText: undefined,
+texademia_frontend  |   headers: undefined,
+texademia_frontend  |   data: undefined,
+texademia_frontend  |   body: undefined,
+texademia_frontend  |   unhandled: true
+texademia_frontend  | }

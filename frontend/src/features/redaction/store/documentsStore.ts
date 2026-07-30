@@ -52,7 +52,7 @@ export const useDocumentsUIStore = create<DocumentsUIStoreState>((set)   => ({
   setGlobalFilter: (filter: string) => set({ globalFilter: filter }),
 
   // sorting state
-  sorting :  [{ id: "updatedAt", desc: true },
+  sorting :  [{ id: "updatedAt", desc: true }],
   setSorting: (sorting: SortingState) => set({ sorting }),
 
 }));
