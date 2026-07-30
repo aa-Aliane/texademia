@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -8,8 +8,7 @@ import {
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
-  useReactTable,
-  type SortingState,
+  useReactTable
 } from "@tanstack/react-table";
 import { useMediaQuery } from "@mantine/hooks";
 import {
@@ -100,7 +99,7 @@ export function DocumentsListPage() {
   const sorting = useDocumentsUIStore((state: DocumentsUIStoreState) => state.sorting);
   const setSorting = useDocumentsUIStore((state: DocumentsUIStoreState) => state.setSorting);
 
-  // const [sorting, setSorting] = useState<SortingState>([{ id: "updatedAt", desc: true }]);
+
 
   // Collapse the per-row action icons into a single "⋮" menu once the
   // viewport gets tight (matches the mantine-breakpoint-md var: 62em).
