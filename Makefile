@@ -12,10 +12,10 @@ shared:
 	codeweaver -input frontend/src/shared -output shared.md
 
 backend:
-	codeweaver -input backend -include=".py" -ignore "__pycache__,.venv,venv,__init__\.py,services/" -output backend.md
+	codeweaver -input backend -include=".py" -ignore "__pycache__,.venv,venv,__init__\.py,auth/,assets,templates\.py" -output backend.md
 
 frontend:
-	codeweaver -input frontend -include ".ts,.tsx,.css,.yaml,.*\.example" -ignore "node_modules,dist,build" -output frontend.md
+	codeweaver -input frontend -include ".ts,.tsx,.css,.yaml,.*\.example" -ignore "node_modules,dist,build,auth/,public/" -output frontend.md
 
 purge_db:
 	docker compose stop backend

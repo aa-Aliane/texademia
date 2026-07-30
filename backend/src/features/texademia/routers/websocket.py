@@ -15,7 +15,7 @@ from redis.asyncio import Redis
 from src.config.settings import settings
 from src.database.session import get_db
 from src.features.auth.manager import access_backend, get_user_manager
-from .documents import _get_accessible_document
+from .documents import _get_accessible_document, list_accessible_document_ids
 
 router = APIRouter(tags=["websocket"])
 
@@ -141,4 +141,113 @@ async def document_socket(
         client_task.cancel()
         ping_task.cancel()
         await pubsub.unsubscribe(channel_name)
+        await pubsub.close()
+
+
+@router.websocket("/ws/documents-presence")
+async def documents_presence_socket(
+    websocket: WebSocket,
+    session=Depends(get_db),
+    user_manager=Depends(get_user_manager),
+):
+    """
+    List-page presence: one socket per user, fanning in the `presence`
+    events already published on every `document:{id}` channel by
+    document_socket, tagged with documentId so the client can key its
+    per-row indicator off it. Doesn't handle docs created after connect —
+    a page refresh picks those up, which is an acceptable tradeoff here.
+    """
+    token = websocket.cookies.get("auth_token")
+    if not token:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    strategy = access_backend.get_strategy()
+    user = await strategy.read_token(token, user_manager)
+    if user is None or not user.is_active:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    document_ids = await list_accessible_document_ids(session, user)
+    await websocket.accept()
+    print(
+        f"[ws] documents-presence connected: user={user.email} docs={len(document_ids)}"
+    )
+
+    redis = get_async_redis()
+    pubsub = redis.pubsub()
+    channel_to_doc = {f"document:{doc_id}": str(doc_id) for doc_id in document_ids}
+    if channel_to_doc:
+        await pubsub.subscribe(*channel_to_doc.keys())
+
+    async def relay_from_redis():
+        async for message in pubsub.listen():
+            if message["type"] != "message":
+                continue
+            channel = message["channel"]
+            channel_name = channel.decode() if isinstance(channel, bytes) else channel
+            document_id = channel_to_doc.get(channel_name)
+            if document_id is None:
+                continue
+
+            data = message["data"]
+            text = data.decode() if isinstance(data, bytes) else data
+            try:
+                payload = json.loads(text)
+            except json.JSONDecodeError:
+                continue
+
+            # Cursor/compile events on the doc channel are noise here —
+            # the list page only cares about "who's currently on this doc".
+            if payload.get("type") != "presence":
+                continue
+
+            payload["documentId"] = document_id
+            try:
+                await websocket.send_text(json.dumps(payload))
+            except Exception as e:
+                print(
+                    f"[ws] documents-presence send_text failed for user={user.email}: {e}"
+                )
+                raise
+
+    async def relay_from_client():
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            # Only pongs expected from this socket — nothing to act on.
+
+    async def send_pings():
+        while True:
+            await asyncio.sleep(PING_INTERVAL_SECONDS)
+            try:
+                await websocket.send_text(json.dumps({"type": "ping"}))
+            except Exception as e:
+                print(f"[ws] documents-presence ping failed for user={user.email}: {e}")
+                raise
+
+    redis_task = asyncio.create_task(relay_from_redis())
+    client_task = asyncio.create_task(relay_from_client())
+    ping_task = asyncio.create_task(send_pings())
+
+    try:
+        done, pending = await asyncio.wait(
+            {redis_task, client_task, ping_task}, return_when=asyncio.FIRST_COMPLETED
+        )
+        for task in done:
+            if task.exception():
+                print(
+                    f"[ws] documents-presence task ended with exception, user={user.email}: {task.exception()!r}"
+                )
+    except WebSocketDisconnect:
+        print(f"[ws] documents-presence client disconnected: user={user.email}")
+    finally:
+        redis_task.cancel()
+        client_task.cancel()
+        ping_task.cancel()
+        if channel_to_doc:
+            await pubsub.unsubscribe(*channel_to_doc.keys())
         await pubsub.close()

@@ -189,6 +189,31 @@ async def list_documents(
         _to_document_read(d, _role_for(d, user)) for d in shared
     ]
 
+async def list_accessible_document_ids(
+    session: AsyncSession, user: User
+) -> list[uuid.UUID]:
+    """
+    Id-only variant of list_documents, used by the presence websocket so it
+    can subscribe to the right Redis channels without paying for the
+    files/collaborators eager load.
+    """
+    owned_result = await session.exec(
+        select(Document.id).where(Document.user_id == user.id)
+    )
+    owned_ids = list(owned_result.all())
+
+    shared_result = await session.exec(
+        select(Document.id)
+        .join(DocumentCollaborator, DocumentCollaborator.document_id == Document.id)
+        .where(
+            DocumentCollaborator.user_id == user.id,
+            DocumentCollaborator.status == CollaboratorStatus.accepted,
+        )
+    )
+    shared_ids = list(shared_result.all())
+
+    return owned_ids + shared_ids
+
 
 @router.post("", response_model=DocumentRead, status_code=status.HTTP_201_CREATED)
 async def create_document(

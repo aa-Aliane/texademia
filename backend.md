@@ -8,14 +8,7 @@ backend
     │   ├── base.py
     │   └── session.py
     ├── features
-    │   ├── auth
-    │   │   ├── dev_user.py
-    │   │   ├── manager.py
-    │   │   ├── models.py
-    │   │   ├── router.py
-    │   │   └── schemas.py
     │   └── texademia
-    │       ├── assets.py
     │       ├── models
     │       │   ├── document.py
     │       │   └── profile.py
@@ -29,7 +22,12 @@ backend
     │       ├── schemas
     │       │   ├── document.py
     │       │   └── profile.py
-    │       └── templates.py
+    │       └── services
+    │           ├── compiler.py
+    │           ├── compiler_worker.py
+    │           ├── preable_merger.py
+    │           ├── pubsub.py
+    │           └── template_migrator.py
     └── main.py
 
 ```
@@ -85,338 +83,6 @@ async_session_maker = sessionmaker(engine, class_=AsyncSession, expire_on_commit
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with async_session_maker() as session:
         yield session
-
-```
-
-
-## src/features/auth/dev_user.py
-
-```py
-import uuid
-from fastapi import Depends
-from sqlmodel import select
-from sqlmodel.ext.asyncio.session import AsyncSession
-
-from src.database.session import get_db
-from src.features.auth.models import User
-
-DEV_USER_EMAIL = "dev@local.test"
-
-
-async def get_dev_user(session: AsyncSession = Depends(get_db)) -> User:
-    """
-    Stand-in for current_active_user while auth isn't wired up yet.
-    Returns (creating if needed) a single fixed local user so ownership
-    checks (Document.user_id, Profile.user_id, ...) keep working unchanged.
-
-    Remove this file and revert routers to current_active_user once
-    real login is implemented.
-    """
-    statement = select(User).where(User.email == DEV_USER_EMAIL)
-    result = await session.exec(statement)
-    user = result.first()
-    if user is None:
-        user = User(
-            email=DEV_USER_EMAIL,
-            hashed_password="!",  # unused — no login flow while this is active
-            is_active=True,
-            is_superuser=False,
-            is_verified=True,
-        )
-        session.add(user)
-        await session.commit()
-        await session.refresh(user)
-    return user
-
-```
-
-
-## src/features/auth/manager.py
-
-```py
-import uuid
-from typing import Optional
-import os
-from fastapi import Depends, Request
-from fastapi_users import BaseUserManager, UUIDIDMixin
-from fastapi_users.authentication import (
-    AuthenticationBackend,
-    CookieTransport,
-    JWTStrategy,
-)
-from fastapi_users.db import SQLAlchemyUserDatabase
-from sqlmodel.ext.asyncio.session import AsyncSession
-from src.config.settings import settings
-from src.database.session import get_db
-from src.features.auth.models import User
-
-# 1. Import your Profile model
-from src.features.texademia.models.profile import Profile
-
-
-async def get_user_db(session: AsyncSession = Depends(get_db)):
-    yield SQLAlchemyUserDatabase(session, User)
-
-
-class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
-    reset_password_token_secret = settings.SECRET_KEY
-    verification_token_secret = settings.SECRET_KEY
-
-    username_field = "email"
-
-    # 2. Override on_after_register to create the profile
-    async def on_after_register(self, user: User, request: Optional[Request] = None):
-        # Access the session from the user_db dependency
-        session = self.user_db.session
-
-        # Create a new Profile instance.
-        # Note: 'tier' defaults to "Free" as defined in your Profile model
-        profile = Profile(user_id=user.id)
-
-        session.add(profile)
-        await session.commit()
-
-        print(f"User {user.id} registered and blank profile created.")
-
-
-async def get_user_manager(user_db=Depends(get_user_db)):
-    yield UserManager(user_db)
-
-
-access_cookie_transport = CookieTransport(
-    cookie_name="auth_token",
-    cookie_max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-    cookie_samesite="lax",
-    cookie_secure=os.getenv("ENVIRONMENT") == "production",
-    cookie_path="/",
-)
-
-refresh_cookie_transport = CookieTransport(
-    cookie_name="refresh_token",
-    cookie_max_age=settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60,
-    cookie_samesite="lax",
-    cookie_secure=os.getenv("ENVIRONMENT") == "production",
-    cookie_path="/api/auth/jwt",
-)
-
-
-def get_access_strategy() -> JWTStrategy:
-    return JWTStrategy(
-        secret=settings.SECRET_KEY,
-        lifetime_seconds=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-    )
-
-
-def get_refresh_strategy() -> JWTStrategy:
-    # Use a different signing key so a refresh token cannot be reused as an
-    # access token even if both cookies are present.
-    return JWTStrategy(
-        secret=f"{settings.SECRET_KEY}:refresh",
-        lifetime_seconds=settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60,
-    )
-
-
-access_backend = AuthenticationBackend(
-    name="jwt",
-    transport=access_cookie_transport,
-    get_strategy=get_access_strategy,
-)
-
-refresh_backend = AuthenticationBackend(
-    name="jwt-refresh",
-    transport=refresh_cookie_transport,
-    get_strategy=get_refresh_strategy,
-)
-
-```
-
-
-## src/features/auth/models.py
-
-```py
-import uuid
-from typing import Optional, List, TYPE_CHECKING
-
-from sqlmodel import Field, SQLModel, Relationship
-
-
-if TYPE_CHECKING:
-    from src.features.texademia.models.profile import Profile
-
-
-class User(SQLModel, table=True):
-    __tablename__ = "users"
-
-    id: uuid.UUID = Field(
-        default_factory=uuid.uuid4, primary_key=True, index=True, nullable=False
-    )
-    email: str = Field(unique=True, index=True, nullable=False)
-    hashed_password: str = Field(nullable=False)
-    is_active: bool = Field(default=True, nullable=False)
-    is_superuser: bool = Field(default=False, nullable=False)
-    is_verified: bool = Field(default=False, nullable=False)
-
-    first_name: Optional[str] = Field(default=None, nullable=True)
-    last_name: Optional[str] = Field(default=None, nullable=True)
-
-    profile: Optional["Profile"] = Relationship(back_populates="user")
-
-```
-
-
-## src/features/auth/router.py
-
-```py
-import uuid
-
-from fastapi import APIRouter, Depends, HTTPException, Response, status
-from fastapi.security import OAuth2PasswordRequestForm
-from fastapi_users import FastAPIUsers
-from src.features.auth.manager import (
-    access_backend,
-    refresh_backend,
-    get_user_manager,
-)
-from src.features.auth.models import User
-from src.features.auth.schemas import UserCreate, UserRead, UserUpdate
-
-fastapi_users = FastAPIUsers[User, uuid.UUID](get_user_manager, [access_backend])
-refresh_fastapi_users = FastAPIUsers[User, uuid.UUID](
-    get_user_manager, [refresh_backend]
-)
-
-router = APIRouter()
-
-# Auto-generates /register
-router.include_router(fastapi_users.get_register_router(UserRead, UserCreate))
-
-router.include_router(
-    fastapi_users.get_users_router(UserRead, UserUpdate),
-    prefix="/users",
-)
-
-# Protected endpoints use the short-lived access token only.
-current_active_user = fastapi_users.current_user(active=True)
-
-# The refresh endpoint uses the long-lived refresh token only.
-refresh_current_user = refresh_fastapi_users.current_user(active=True)
-
-
-def _set_auth_cookie(
-    response: Response,
-    transport,
-    token: str,
-) -> None:
-    response.set_cookie(
-        key=transport.cookie_name,
-        value=token,
-        max_age=transport.cookie_max_age,
-        path=transport.cookie_path,
-        domain=transport.cookie_domain,
-        secure=transport.cookie_secure,
-        httponly=transport.cookie_httponly,
-        samesite=transport.cookie_samesite,
-    )
-
-
-def _clear_auth_cookie(response: Response, transport) -> None:
-    response.delete_cookie(
-        key=transport.cookie_name,
-        path=transport.cookie_path,
-        domain=transport.cookie_domain,
-    )
-
-
-@router.post("/jwt/login")
-async def login(
-    response: Response,
-    credentials: OAuth2PasswordRequestForm = Depends(),
-    user_manager=Depends(get_user_manager),
-):
-    """Authenticate and set both access and refresh cookies."""
-    user = await user_manager.authenticate(credentials)
-    if user is None or not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="LOGIN_BAD_CREDENTIALS",
-        )
-
-    access_strategy = access_backend.get_strategy()
-    refresh_strategy = refresh_backend.get_strategy()
-
-    access_token = await access_strategy.write_token(user)
-    refresh_token = await refresh_strategy.write_token(user)
-
-    _set_auth_cookie(response, access_backend.transport, access_token)
-    _set_auth_cookie(response, refresh_backend.transport, refresh_token)
-
-    return {"detail": "Login successful"}
-
-
-@router.post("/jwt/logout")
-async def logout(response: Response):
-    """Clear both access and refresh cookies."""
-    _clear_auth_cookie(response, access_backend.transport)
-    _clear_auth_cookie(response, refresh_backend.transport)
-    return {"detail": "Logout successful"}
-
-
-@router.post("/jwt/refresh")
-async def refresh(
-    response: Response,
-    user: User = Depends(refresh_current_user),
-):
-    """Use a valid refresh cookie to issue a new access cookie."""
-    access_strategy = access_backend.get_strategy()
-    access_token = await access_strategy.write_token(user)
-    _set_auth_cookie(response, access_backend.transport, access_token)
-    return {"detail": "Refresh successful"}
-
-```
-
-
-## src/features/auth/schemas.py
-
-```py
-import uuid
-
-from fastapi_users import schemas
-from pydantic import EmailStr
-
-
-class UserRead(schemas.BaseUser[uuid.UUID]):
-    first_name: str | None = None
-    last_name: str | None = None
-    email: EmailStr
-
-
-class UserCreate(schemas.BaseUserCreate):
-    email: EmailStr
-    password: str
-
-
-class UserUpdate(schemas.BaseUserUpdate):
-    first_name: str | None = None
-    last_name: str | None = None
-
-```
-
-
-## src/features/texademia/assets.py
-
-```py
-# src/features/texademia/assets.py
-from pathlib import Path
-
-ASSETS_DIR = Path(__file__).parent / "assets"
-
-
-def get_template_asset_files(template: str) -> list[Path]:
-    """Extra .sty/.cls/.bst files a template needs at compile time."""
-    template_dir = ASSETS_DIR / template
-    if not template_dir.exists():
-        return []
-    return [f for f in template_dir.iterdir() if f.is_file()]
 
 ```
 
@@ -1246,6 +912,8 @@ router = APIRouter(tags=["websocket"])
 
 _async_redis: Redis | None = None
 
+PING_INTERVAL_SECONDS = 20
+
 
 def get_async_redis() -> Redis:
     global _async_redis
@@ -1309,18 +977,47 @@ async def document_socket(
                 payload = json.loads(raw)
             except json.JSONDecodeError:
                 continue
-            if payload.get("type") == "presence":
+
+            msg_type = payload.get("type")
+
+            if msg_type == "presence":
                 payload["userId"] = str(user.id)
                 payload["name"] = user.first_name or user.email
                 payload["email"] = user.email
                 await redis.publish(channel_name, json.dumps(payload))
 
+            elif msg_type == "cursor":
+                payload["userId"] = str(user.id)
+                payload["name"] = user.first_name or user.email
+                payload["email"] = user.email
+                await redis.publish(channel_name, json.dumps(payload))
+
+            elif msg_type == "pong":
+                # Client's reply to our keepalive ping — nothing to do,
+                # just proves the round trip is alive.
+                pass
+
+    async def send_pings():
+        # App-level keepalive. This matters most during long-running work
+        # elsewhere in the system (e.g. a compile job saturating CPU on a
+        # shared host) — it guarantees outbound traffic on this socket at a
+        # fixed cadence so idle-timeout proxies/load balancers don't reap it,
+        # independent of how busy the rest of the stack is.
+        while True:
+            await asyncio.sleep(PING_INTERVAL_SECONDS)
+            try:
+                await websocket.send_text(json.dumps({"type": "ping"}))
+            except Exception as e:
+                print(f"[ws] ping failed for user={user.email}: {e}")
+                raise
+
     redis_task = asyncio.create_task(relay_from_redis())
     client_task = asyncio.create_task(relay_from_client())
+    ping_task = asyncio.create_task(send_pings())
 
     try:
         done, pending = await asyncio.wait(
-            {redis_task, client_task}, return_when=asyncio.FIRST_COMPLETED
+            {redis_task, client_task, ping_task}, return_when=asyncio.FIRST_COMPLETED
         )
         for task in done:
             if task.exception():
@@ -1333,6 +1030,7 @@ async def document_socket(
         print(f"[ws] cleaning up: user={user.email} doc={document_id}")
         redis_task.cancel()
         client_task.cancel()
+        ping_task.cancel()
         await pubsub.unsubscribe(channel_name)
         await pubsub.close()
 
@@ -1485,105 +1183,755 @@ class ProfileUpdate(BaseModel):
 ```
 
 
-## src/features/texademia/templates.py
+## src/features/texademia/services/compiler.py
 
 ```py
-"""
-Starter file sets per document theme. Add a new entry here whenever you
-support another style — the .cls/.sty it needs must exist in the server's
-TeX distribution (e.g. IEEEtran needs texlive-publishers installed).
-"""
+# src/features/texademia/services/compiler.py
+import uuid
+from pathlib import Path
 
-from typing import TypedDict, List, Tuple
+import redis
+from rq import Queue
+
+from src.config.settings import settings
+from src.features.texademia.models.document import (
+    DocumentFile,
+)
+
+redis_conn = redis.from_url(settings.REDIS_URL)
+compile_queue = Queue("latex_compile", connection=redis_conn)
+
+OUTPUT_DIR = Path("compiled_pdfs")
+OUTPUT_DIR.mkdir(exist_ok=True)
 
 
-class TemplateFile(TypedDict):
-    name: str
-    language: str
-    content: str
+class CompileError(Exception):
+    def __init__(self, message: str, log: str = ""):
+        self.message = message
+        self.log = log
+        super().__init__(message)
 
 
-# Raw starter tuples: (filename, language, content)
-_DEFAULT: List[Tuple[str, str, str]] = [
-    (
-        "main.tex",
-        "latex",
-        "\\documentclass{article}\n\\begin{document}\nHello\n\\end{document}\n",
+def enqueue_compile_job(
+    document_id: uuid.UUID, files: list[DocumentFile], template: str
+) -> str:
+    """
+    Enqueues a compilation job and returns the job ID for polling.
+    """
+    files_data = [
+        {"id": str(f.id), "name": f.name, "language": f.language, "content": f.content}
+        for f in files
+    ]
+
+    from src.features.texademia.services.compiler_worker import compile_latex_job
+
+    job = compile_queue.enqueue(
+        compile_latex_job,
+        str(document_id),
+        files_data,
+        template,
+        job_timeout=180,
+        result_ttl=3600,
+    )
+    return job.id
+
+
+def get_job_status(job_id: str) -> dict:
+    """Poll job status from Redis."""
+    from rq.job import Job
+
+    job = Job.fetch(job_id, connection=redis_conn)
+
+    if job.is_finished:
+        return {
+            "status": "done",
+            "result": job.result,
+        }
+    elif job.is_failed:
+        meta = job.meta or {}
+        return {
+            "status": "error",
+            "error": str(job.exc_info) if job.exc_info else "Unknown error",
+            "log": meta.get("log", ""),
+        }
+    else:
+        meta = job.meta or {}
+        return {
+            "status": meta.get("status", "queued"),
+            "step": meta.get("step", "waiting"),
+            "percent": meta.get("percent", 0),
+            "message": meta.get("message", "Job is queued..."),
+        }
+
+```
+
+
+## src/features/texademia/services/compiler_worker.py
+
+```py
+# src/features/texademia/services/compiler_worker.py
+import os
+import resource
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
+
+import redis
+from rq import get_current_job
+
+from src.config.settings import settings
+from src.features.texademia.assets import get_template_asset_files
+from src.features.texademia.services.pubsub import publish_document_event
+
+redis_conn = redis.from_url(settings.REDIS_URL)
+
+OUTPUT_DIR = Path("compiled_pdfs")
+OUTPUT_DIR.mkdir(exist_ok=True)
+
+COMPILE_TIMEOUT_SECONDS = 60  # per pdflatex/bibtex invocation
+MEMORY_LIMIT_BYTES = 768 * 1024 * 1024  # bumped a bit — 512MB was tight for real docs
+
+
+class CompileError(Exception):
+    def __init__(self, message: str, log: str = ""):
+        self.message = message
+        self.log = log
+        super().__init__(message)
+
+
+def _limit_memory():
+    try:
+        resource.setrlimit(resource.RLIMIT_AS, (MEMORY_LIMIT_BYTES, MEMORY_LIMIT_BYTES))
+    except (ValueError, OSError):
+        pass
+
+
+def _run(cmd: list[str], cwd: Path, timeout: int) -> tuple[int, str]:
+    proc = subprocess.Popen(
+        cmd,
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        preexec_fn=_limit_memory,
+    )
+    try:
+        stdout, _ = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.communicate()
+        return -1, f"Command timed out after {timeout}s: {' '.join(cmd)}"
+    return proc.returncode, stdout.decode(errors="replace")
+
+
+def compile_latex_job(document_id: str, files_data: list[dict], template: str) -> dict:
+    job = get_current_job()
+    combined_log = []
+
+    main_file = next((f for f in files_data if f["name"].endswith(".tex")), None)
+    print(
+        f"[worker] doc={document_id} template={template} "
+        f"files={[(f['name'], len(f['content'])) for f in files_data]} "
+        f"main_snippet={main_file['content'][:200]!r}"
+        if main_file
+        else "no-main"
+    )
+
+    def update_progress(step: str, percent: int, message: str = ""):
+        if job:
+            job.meta = {
+                "status": "running",
+                "step": step,
+                "percent": percent,
+                "message": message,
+            }
+            job.save_meta()
+
+    def fail(message: str):
+        full_log = "\n\n".join(combined_log)
+        if job:
+            job.meta = {**(job.meta or {}), "log": full_log}
+            job.save_meta()
+        publish_document_event(
+            document_id,
+            {
+                "type": "compile:update",
+                "phase": "error",
+                "error": message,
+                "log": full_log,
+            },
+        )
+        raise CompileError(message, log=full_log)
+
+    update_progress("preparing", 10, "Setting up compilation environment")
+
+    if not shutil.which("pdflatex"):
+        fail("pdflatex is not installed.")
+
+    main_file = next((f for f in files_data if f["name"].endswith(".tex")), None)
+    if main_file is None:
+        fail("No .tex file found.")
+
+    main_stem = Path(main_file["name"]).stem
+    has_bib = any(f["name"].endswith(".bib") for f in files_data)
+
+    os.environ.setdefault("TMPDIR", "/var/tmp")
+
+    with tempfile.TemporaryDirectory(dir="/var/tmp") as tmp:
+        tmp_path = Path(tmp)
+
+        update_progress("copying", 15, "Copying template assets")
+        for asset in get_template_asset_files(template):
+            shutil.copy(asset, tmp_path / asset.name)
+
+        update_progress("writing", 20, "Writing source files")
+        for f in files_data:
+            (tmp_path / f["name"]).write_text(f["content"], encoding="utf-8")
+
+        pdflatex_cmd = [
+            "pdflatex",
+            "-interaction=nonstopmode",
+            "-halt-on-error",
+            "-no-shell-escape",
+            main_file["name"],
+        ]
+
+        update_progress("compiling", 35, "Running pdflatex (pass 1)")
+        rc, log = _run(pdflatex_cmd, tmp_path, COMPILE_TIMEOUT_SECONDS)
+        combined_log.append(f"--- pdflatex pass 1 ---\n{log}")
+        if rc != 0:
+            fail("LaTeX compilation failed on first pass.")
+
+        if has_bib:
+            update_progress("bibliography", 55, "Running bibtex")
+            rc, log = _run(["bibtex", main_stem], tmp_path, COMPILE_TIMEOUT_SECONDS)
+            combined_log.append(f"--- bibtex ---\n{log}")
+            # bibtex returns nonzero on warnings too, so don't hard-fail here —
+            # only bail if it clearly couldn't run at all.
+            if rc != 0 and "I found no" not in log and "I couldn't open" not in log:
+                pass  # keep going; pdflatex passes below will surface real issues
+
+            update_progress("compiling", 70, "Running pdflatex (pass 2)")
+            rc, log = _run(pdflatex_cmd, tmp_path, COMPILE_TIMEOUT_SECONDS)
+            combined_log.append(f"--- pdflatex pass 2 ---\n{log}")
+            if rc != 0:
+                fail("LaTeX compilation failed after bibtex.")
+
+            update_progress("compiling", 85, "Running pdflatex (pass 3)")
+            rc, log = _run(pdflatex_cmd, tmp_path, COMPILE_TIMEOUT_SECONDS)
+            combined_log.append(f"--- pdflatex pass 3 ---\n{log}")
+            if rc != 0:
+                fail("LaTeX compilation failed on final pass.")
+
+        pdf_path = tmp_path / f"{main_stem}.pdf"
+        if not pdf_path.exists():
+            fail("Compilation finished but no PDF was produced.")
+
+        update_progress("saving", 95, "Saving PDF output")
+        dest_path = OUTPUT_DIR / f"{document_id}.pdf"
+        shutil.copyfile(pdf_path, dest_path)
+
+    full_log = "\n\n".join(combined_log)
+    update_progress("done", 100, "Compilation complete")
+
+    publish_document_event(
+        document_id,
+        {
+            "type": "compile:update",
+            "phase": "done",
+            "pdfUrl": f"/static/compiled/{document_id}.pdf",
+        },
+    )
+    return {
+        "status": "success",
+        "pdf_url": f"/static/compiled/{document_id}.pdf",
+        "log": full_log,
+    }
+
+```
+
+
+## src/features/texademia/services/preable_merger.py
+
+```py
+# src/features/texademia/services/preamble_merger.py
+import re
+
+# Commands that accumulate — safe to merge/union across preambles
+ACCUMULATOR_PATTERNS = {
+    "usepackage": re.compile(
+        r"\\usepackage(?:\[(?P<opts>[^\]]*)\])?\{(?P<name>[^}]+)\}"
     ),
-    ("references.bib", "bibtex", ""),
-]
-
-_ARXIV: List[Tuple[str, str, str]] = [
-    (
-        "main.tex",
-        "latex",
-        "\\documentclass{article}\n"
-        "\\usepackage{arxiv}\n"
-        "\\title{Your Paper Title}\n"
-        "\\author{Your Name}\n"
-        "\\begin{document}\n"
-        "\\maketitle\n"
-        "\\begin{abstract}\nWrite your abstract here.\n\\end{abstract}\n"
-        "\\section{Introduction}\n"
-        "\\end{document}\n",
-    ),
-    ("references.bib", "bibtex", ""),
-]
-
-_IEEE: List[Tuple[str, str, str]] = [
-    (
-        "main.tex",
-        "latex",
-        "\\documentclass[conference]{IEEEtran}\n"
-        "\\begin{document}\n"
-        "\\title{Your Paper Title}\n"
-        "\\author{\\IEEEauthorblockN{Your Name}}\n"
-        "\\maketitle\n"
-        "\\begin{abstract}\nWrite your abstract here.\n\\end{abstract}\n"
-        "\\section{Introduction}\n"
-        "\\end{document}\n",
-    ),
-    ("references.bib", "bibtex", ""),
-]
-
-_ACL: List[Tuple[str, str, str]] = [
-    (
-        "main.tex",
-        "latex",
-        "\\documentclass[11pt]{article}\n"
-        "\\usepackage[review]{acl}\n"
-        "\\package{times}\n"
-        "\\usepackage{latexsym}\n"
-        "\\title{Your Paper Title}\n"
-        "\\author{Your Name \\\\ Your Affiliation \\\\ \\texttt{you@example.com}}\n"
-        "\\begin{document}\n"
-        "\\maketitle\n"
-        "\\begin{abstract}\nWrite your abstract here.\n\\end{abstract}\n"
-        "\\section{Introduction}\n"
-        "\\end{document}\n",
-    ),
-    ("references.bib", "bibtex", ""),
-]
-
-_TEMPLATES = {
-    "default": _DEFAULT,
-    "arxiv": _ARXIV,
-    "ieee": _IEEE,
-    "acl": _ACL,
+    "usetikzlibrary": re.compile(r"\\usetikzlibrary\{(?P<name>[^}]+)\}"),
+    "newcommand": re.compile(r"\\(?:re)?newcommand\{?\\(?P<name>[a-zA-Z]+)\}?"),
 }
 
-TEMPLATE_NAMES = set(_TEMPLATES.keys())
+# Packages where the TARGET template's version should always win
+# (they usually set document geometry/typography and conflict if duplicated)
+TEMPLATE_OWNED_PACKAGES = {
+    "geometry",
+    "hyperref",
+    "fontenc",
+    "inputenc",
+    "times",
+    "natbib",
+    "lineno",
+    "caption",
+}
 
 
-def get_template_files(template: str) -> List[TemplateFile]:
+def _extract_preamble(tex: str) -> str:
+    match = re.search(r"(.*?)\\begin\{document\}", tex, re.DOTALL)
+    return match.group(1) if match else tex
+
+
+def _parse_packages(preamble: str) -> dict[str, str | None]:
+    """Returns {package_name: options_or_None} preserving order via insertion."""
+    pkgs = {}
+    for m in ACCUMULATOR_PATTERNS["usepackage"].finditer(preamble):
+        name = m.group("name").strip()
+        # \usepackage{a,b,c} form -> split
+        for single in [n.strip() for n in name.split(",")]:
+            pkgs[single] = m.group("opts")
+    return pkgs
+
+
+def _parse_tikz_libraries(preamble: str) -> set[str]:
+    libs = set()
+    for m in ACCUMULATOR_PATTERNS["usetikzlibrary"].finditer(preamble):
+        for lib in m.group("name").split(","):
+            libs.add(lib.strip())
+    return libs
+
+
+def merge_preambles(source_tex: str, target_preamble: str) -> str:
     """
-    Returns the starter files for a template as structured dictionaries.
+    source_tex: full .tex of the ORIGINAL document (e.g. arxiv version)
+    target_preamble: preamble of the TARGET template (e.g. acl.sty-based main.tex),
+                      including everything up to (not including) \\begin{document}
+
+    Returns the merged preamble to use in the duplicated/converted document.
     """
-    raw_files = _TEMPLATES.get(template, _DEFAULT)
-    return [
-        {"name": name, "language": lang, "content": content}
-        for name, lang, content in raw_files
-    ]
+    source_preamble = _extract_preamble(source_tex)
+
+    source_pkgs = _parse_packages(source_preamble)
+    target_pkgs = _parse_packages(target_preamble)
+
+    source_tikz_libs = _parse_tikz_libraries(source_preamble)
+    target_tikz_libs = _parse_tikz_libraries(target_preamble)
+    missing_tikz_libs = source_tikz_libs - target_tikz_libs
+
+    merged = target_preamble.rstrip()
+
+    # 1. Add tikz libraries the source needed but target doesn't have
+    if missing_tikz_libs:
+        # only add if tikz itself is loaded somewhere (target or source)
+        if "tikz" in target_pkgs or "tikz" in source_pkgs:
+            merged += "\n\\usetikzlibrary{" + ",".join(sorted(missing_tikz_libs)) + "}"
+
+    # 2. Add any package the source had that target doesn't, and that
+    #    isn't one of the template-owned/conflicting ones
+    for pkg, opts in source_pkgs.items():
+        if pkg in target_pkgs:
+            continue
+        if pkg in TEMPLATE_OWNED_PACKAGES:
+            continue
+        line = (
+            f"\\usepackage{{{pkg}}}" if not opts else f"\\usepackage[{opts}]{{{pkg}}}"
+        )
+        merged += f"\n{line}"
+
+    # 3. Carry over any custom \newcommand / \renewcommand macros the body relies on
+    for m in ACCUMULATOR_PATTERNS["newcommand"].finditer(source_preamble):
+        macro_name = m.group("name")
+        if f"\\{macro_name}" not in target_preamble:
+            # grab the full line so we keep the definition, not just the name
+            line_match = re.search(
+                rf"\\(?:re)?newcommand\{{?\\{macro_name}\}}?.*", source_preamble
+            )
+            if line_match:
+                merged += f"\n{line_match.group(0)}"
+
+    return merged
+
+```
+
+
+## src/features/texademia/services/pubsub.py
+
+```py
+import json
+import redis
+from src.config.settings import settings
+
+redis_conn = redis.from_url(settings.REDIS_URL)
+
+
+def publish_document_event(document_id: str, event: dict) -> None:
+    try:
+        result = redis_conn.publish(f"document:{document_id}", json.dumps(event))
+        print(f"[pubsub] published to document:{document_id}, {result} subscriber(s)")
+    except redis.RedisError as e:
+        print(f"[pubsub] FAILED to publish: {e}")
+
+```
+
+
+## src/features/texademia/services/template_migrator.py
+
+```py
+# src/features/texademia/services/template_migrator.py
+import re
+from src.features.texademia.templates import (
+    get_template_files,
+    TEMPLATE_NAMES,
+)  # CHANGED
+
+_BEGIN_DOC_RE = re.compile(r"\\begin\{document\}")
+_END_DOC_RE = re.compile(r"\\end\{document\}")
+_USEPACKAGE_RE = re.compile(r"\\usepackage(?:\[[^\]]*\])?\{([^}]*)\}")
+_USETIKZLIBRARY_RE = re.compile(r"\\usetikzlibrary\{([^}]*)\}")
+_NEWCOMMAND_START_RE = re.compile(r"\\newcommand\*?")
+
+# Fallback for commands that only exist in specific templates' .sty files
+# (e.g. arxiv.sty's \keywords). \providecommand is a no-op if the target
+# template already defines it. \keywords splits its argument on \and, so
+# \and is locally redefined inside a group before expanding #1.
+_COMPAT_SHIM = "\\providecommand{\\keywords}[1]{{\\def\\and{, }\\par\\noindent\\textbf{Keywords:} #1\\par}}\n"
+
+_CONFLICTING_PACKAGES = {"authblk", "achemso", "elsarticle"}
+
+# --- body overflow fix (NEW) -------------------------------------------------
+_INCLUDEGRAPHICS_RE = re.compile(r"\\includegraphics(\[[^\]]*\])?\{([^}]*)\}")
+_ENV_BLOCK_RE = re.compile(r"\\begin\{(figure\*?|table\*?)\}.*?\\end\{\1\}", re.DOTALL)
+# Any of these are "raw content" environments that can silently keep the
+# source template's wider sizing (a fixed-width tabular, or a tikzpicture
+# built with absolute node/coordinate widths) — both get wrapped in
+# \resizebox the same way, since resizebox works on arbitrary box content,
+# not just tables.
+_CONTENT_ENV_RE = re.compile(r"\\begin\{(tabular\*?|tikzpicture)\}")
+_ALREADY_WRAPPED_RE = re.compile(r"\\(resizebox|adjustbox)")
+# -----------------------------------------------------------------------------
+
+
+def _split_preamble(tex_source: str) -> tuple[str, str]:
+    """(everything before \\begin{document}, everything from \\begin{document} onward)."""
+    match = _BEGIN_DOC_RE.search(tex_source)
+    if not match:
+        return tex_source, ""
+    return tex_source[: match.start()], tex_source[match.start() :]
+
+
+def _extract_body(tex_source: str) -> str:
+    """Content strictly between \\begin{document} and \\end{document}."""
+    begin = _BEGIN_DOC_RE.search(tex_source)
+    end = _END_DOC_RE.search(tex_source)
+    if not begin or not end or end.start() < begin.end():
+        return tex_source
+    return tex_source[begin.end() : end.start()]
+
+
+def _package_names(preamble: str) -> set[str]:
+    names: set[str] = set()
+    for m in _USEPACKAGE_RE.finditer(preamble):
+        names.update(pkg.strip() for pkg in m.group(1).split(","))
+    return names
+
+
+def _tikz_library_names(preamble: str) -> set[str]:
+    names: set[str] = set()
+    for m in _USETIKZLIBRARY_RE.finditer(preamble):
+        names.update(lib.strip() for lib in m.group(1).split(","))
+    return names
+
+
+def _extra_usepackage_lines(source_preamble: str, target_preamble: str) -> list[str]:
+    target_pkgs = _package_names(target_preamble)
+    lines = []
+    for m in _USEPACKAGE_RE.finditer(source_preamble):
+        pkgs = {p.strip() for p in m.group(1).split(",")}
+        if pkgs & TEMPLATE_NAMES:
+            continue
+        if pkgs & _CONFLICTING_PACKAGES:  # NEW
+            continue
+        if pkgs & target_pkgs:
+            continue
+        lines.append(m.group(0))
+    return lines
+
+
+def _extra_tikzlibrary_line(source_preamble: str, target_preamble: str) -> str | None:
+    """
+    Union any \\usetikzlibrary{...} entries from the source that the target
+    template doesn't already load. Without this, a body that relies on e.g.
+    `right=of <node>` positioning syntax will compile fine in its original
+    template but fatally error after conversion, since that syntax silently
+    depends on `\\usetikzlibrary{positioning}` being loaded somewhere.
+    """
+    source_libs = _tikz_library_names(source_preamble)
+    if not source_libs:
+        return None
+    target_libs = _tikz_library_names(target_preamble)
+    missing = source_libs - target_libs
+    if not missing:
+        return None
+    return "\\usetikzlibrary{" + ",".join(sorted(missing)) + "}"
+
+
+def _find_balanced_brace(text: str, brace_start: int) -> str:
+    """text[brace_start] must be '{'; return its content up to the matching '}'."""
+    depth = 0
+    for i in range(brace_start, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[brace_start + 1 : i]
+    return text[brace_start + 1 :]  # unbalanced — best effort
+
+
+def _extract_command_arg(text: str, command: str) -> str | None:
+    """Find \\command[...]{...} (options optional) and return the {...} content."""
+    m = re.search(r"\\" + re.escape(command) + r"(?:\[[^\]]*\])?\s*\{", text)
+    if not m:
+        return None
+    return _find_balanced_brace(text, m.end() - 1)
+
+
+def _replace_command_arg(preamble: str, command: str, new_arg: str) -> str:
+    """Replace an existing \\command{...} argument, or append a fresh \\command{...} if missing."""
+    m = re.search(r"\\" + re.escape(command) + r"(?:\[[^\]]*\])?\s*\{", preamble)
+    if not m:
+        return preamble + f"\\{command}{{{new_arg}}}\n"
+    brace_start = m.end() - 1
+    old_arg = _find_balanced_brace(preamble, brace_start)
+    return (
+        preamble[: brace_start + 1]
+        + new_arg
+        + preamble[brace_start + 1 + len(old_arg) :]
+    )
+
+
+def _parse_newcommands(preamble: str) -> list[tuple[str, str]]:  # NEW
+    """
+    Returns [(command_name, full_definition_text), ...] for each
+    \\newcommand/\\renewcommand found in the preamble. Handles both
+    \\newcommand{\\foo}... and \\newcommand\\foo... forms, plus optional
+    [nargs] and [default] specs before the body brace group.
+    """
+    results = []
+    for m in _NEWCOMMAND_START_RE.finditer(preamble):
+        start = m.start()
+        pos = m.end()
+        while pos < len(preamble) and preamble[pos].isspace():
+            pos += 1
+
+        name = None
+        if pos < len(preamble) and preamble[pos] == "{":
+            arg = _find_balanced_brace(preamble, pos)
+            name = arg.lstrip("\\").strip()
+            pos += len(arg) + 2
+        elif pos < len(preamble) and preamble[pos] == "\\":
+            name_match = re.match(r"\\([a-zA-Z]+)", preamble[pos:])
+            if name_match:
+                name = name_match.group(1)
+                pos += name_match.end()
+
+        if name is None:
+            continue
+
+        while pos < len(preamble) and preamble[pos].isspace():
+            pos += 1
+        # skip up to two optional [...] groups: [nargs] and [default]
+        for _ in range(2):
+            if pos < len(preamble) and preamble[pos] == "[":
+                close = preamble.find("]", pos)
+                if close == -1:
+                    break
+                pos = close + 1
+                while pos < len(preamble) and preamble[pos].isspace():
+                    pos += 1
+            else:
+                break
+
+        if pos >= len(preamble) or preamble[pos] != "{":
+            continue  # not a brace-bodied definition — skip, best effort
+
+        body = _find_balanced_brace(preamble, pos)
+        end = pos + len(body) + 2
+        results.append((name, preamble[start:end]))
+    return results
+
+
+def _extra_newcommand_lines(
+    source_preamble: str, target_preamble: str
+) -> list[str]:  # NEW
+    """
+    Carry over custom \\newcommand/\\renewcommand macros the body relies on
+    (e.g. a \\best{} helper used to bold the top score in a results table)
+    that the target template doesn't already define. Without this, swapping
+    templates silently drops any macro the original author defined for their
+    own body content, and the body fails with 'Undefined control sequence'.
+    """
+    target_names = {name for name, _ in _parse_newcommands(target_preamble)}
+    target_names.add("keywords")  # already covered by _COMPAT_SHIM
+
+    lines = []
+    seen = set()
+    for name, definition in _parse_newcommands(source_preamble):
+        if name in target_names or name in seen:
+            continue
+        seen.add(name)
+        lines.append(definition)
+    return lines
+
+
+def _target_width_macro(env_name: str) -> str:  # NEW
+    """Starred (spanning) envs get \\textwidth; single-column envs get \\columnwidth."""
+    return "\\textwidth" if env_name.endswith("*") else "\\columnwidth"
+
+
+def _fix_includegraphics_widths(block: str, width_macro: str) -> str:  # NEW
+    def _replace(m: re.Match) -> str:
+        opts, path = m.group(1) or "", m.group(2)
+        # Already relative to the right thing (columnwidth/linewidth/textwidth) — leave it.
+        if opts and re.search(r"width\s*=\s*\\(column|line|text)width", opts):
+            return m.group(0)
+        if not opts:
+            return f"\\includegraphics[width={width_macro}]{{{path}}}"
+        if "width=" in opts:
+            opts = re.sub(r"width\s*=\s*[^,\]]+", f"width={width_macro}", opts)
+        else:
+            opts = opts[:-1] + f",width={width_macro}]"
+        return f"\\includegraphics{opts}{{{path}}}"
+
+    return _INCLUDEGRAPHICS_RE.sub(_replace, block)
+
+
+def _fix_content_overflow(block: str, width_macro: str) -> str:  # NEW
+    """
+    Wraps the first raw-content environment in a figure/table block (a
+    tabular, or a tikzpicture) in \\resizebox, unless it's already wrapped
+    in resizebox/adjustbox. This is what actually catches figures made of
+    plain TikZ nodes/arrows with hardcoded absolute widths — those have no
+    \\includegraphics and no tabular, so they'd otherwise pass through the
+    migration completely unscaled and keep overflowing the narrower target
+    column.
+    """
+    if _ALREADY_WRAPPED_RE.search(block):
+        return block  # author already handled scaling, don't double-wrap
+
+    m = _CONTENT_ENV_RE.search(block)
+    if not m:
+        return block
+
+    env_name = m.group(1)
+    begin = m.start()
+    end_marker = f"\\end{{{env_name}}}"
+    end_idx = block.find(end_marker, begin)
+    if end_idx == -1:
+        return block  # unbalanced — best effort, leave as-is
+    end_idx += len(end_marker)
+
+    content = block[begin:end_idx]
+    wrapped = f"\\resizebox{{{width_macro}}}{{!}}{{%\n{content}}}"
+    return block[:begin] + wrapped + block[end_idx:]
+
+
+def _fix_body_overflow(body: str) -> str:  # NEW
+    """
+    Rewrites figure/table environments so their contents scale to the
+    target template's column width instead of keeping the source
+    template's (often wider) sizing, which otherwise overflows into the
+    margin/gutter after a single->two-column style migration.
+
+    - Plain figure/table -> width rewritten to \\columnwidth.
+    - figure*/table* (already spanning) -> width rewritten to \\textwidth.
+    - includegraphics widths already relative to \\columnwidth/\\linewidth/
+      \\textwidth are left untouched.
+    - Bare tabular or tikzpicture content with no existing resizebox/
+      adjustbox gets wrapped in \\resizebox{<width_macro>}{!}{...}. This is
+      what catches figures built directly out of raw TikZ (nodes, arrows,
+      boxes) with hardcoded absolute widths — there's no includegraphics
+      or tabular to key off of otherwise, so without this they pass
+      through untouched and keep overflowing.
+    """
+
+    def _fix_block(m: re.Match) -> str:
+        env_name = m.group(1)
+        block = m.group(0)
+        width_macro = _target_width_macro(env_name)
+        block = _fix_includegraphics_widths(block, width_macro)
+        block = _fix_content_overflow(block, width_macro)
+        return block
+
+    return _ENV_BLOCK_RE.sub(_fix_block, body)
+
+
+def migrate_files_to_template(
+    files: list[dict],  # [{"name", "language", "content"}, ...]
+    target_template: str,
+) -> list[dict]:
+    """
+    Rebuild each .tex file for the target template: swap \\documentclass and
+    the template's own style package, but keep the author's actual title,
+    author block, extra \\usepackage lines, custom macros, and full body
+    content intact (with figure/table widths rescaled to the target
+    template's column width to avoid overflow). Non-.tex files (bib, etc.)
+    pass through unchanged.
+    """
+    starters = {
+        name: content for name, _lang, content in get_template_files(target_template)
+    }
+
+    migrated = []
+    for f in files:
+        starter = starters.get(f["name"])
+        if f["name"].endswith(".tex") and starter is not None:
+            source_preamble, _ = _split_preamble(f["content"])
+            target_preamble, _ = _split_preamble(starter)
+
+            extra_pkgs = _extra_usepackage_lines(source_preamble, target_preamble)
+            new_preamble = target_preamble
+            if extra_pkgs:
+                new_preamble = (
+                    new_preamble.rstrip("\n") + "\n" + "\n".join(extra_pkgs) + "\n"
+                )
+
+            extra_tikzlib = _extra_tikzlibrary_line(source_preamble, target_preamble)
+            if extra_tikzlib:
+                new_preamble = new_preamble.rstrip("\n") + "\n" + extra_tikzlib + "\n"
+
+            # Carry over custom \newcommand/\renewcommand macros the body needs
+            extra_macros = _extra_newcommand_lines(source_preamble, target_preamble)
+            if extra_macros:
+                new_preamble = (
+                    new_preamble.rstrip("\n") + "\n" + "\n".join(extra_macros) + "\n"
+                )
+
+            source_title = _extract_command_arg(source_preamble, "title")
+            if source_title is not None:
+                new_preamble = _replace_command_arg(new_preamble, "title", source_title)
+            source_author = _extract_command_arg(source_preamble, "author")
+            if source_author is not None:
+                new_preamble = _replace_command_arg(
+                    new_preamble, "author", source_author
+                )
+
+            new_preamble += _COMPAT_SHIM
+
+            body = _extract_body(f["content"])
+            body = _fix_body_overflow(body)  # NEW — rescale figure/table widths
+            migrated.append(
+                {
+                    **f,
+                    "content": f"{new_preamble}\\begin{{document}}\n{body}\\end{{document}}\n",
+                }
+            )
+        else:
+            migrated.append(f)
+    return migrated
 
 ```
 

@@ -47,7 +47,8 @@ import {
 import { createDocument, deleteDocument, documentsQueryOptions, duplicateDocument } from "../api/redaction";
 import { CreateDocumentDialog } from "./createDocumentDialog";
 import { DuplicateDocumentDialog } from "./duplicateDocumentDialog";
-import { CollaboratorsDialog } from "./collaboratorsDialog"; // NEW
+import { CollaboratorsDialog } from "./collaboratorsDialog";
+import { useDocumentsPresence } from "../hooks/useDocumentsPresence";
 import type { RedactionDocument } from "../types/redaction";
 import classes from "./documentsListPage.module.css";
 
@@ -68,6 +69,7 @@ const columnHelper = createColumnHelper<RedactionDocument>();
 
 export function DocumentsListPage() {
   const { data: documents, isLoading } = useQuery(documentsQueryOptions());
+  const viewersByDocument = useDocumentsPresence();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -159,35 +161,49 @@ export function DocumentsListPage() {
             );
           }
 
+          const liveViewers = viewersByDocument[doc.id] ?? []; // NEW
+
           return (
             <Group gap={6} wrap="nowrap">
-              {others.slice(0, 4).map((c) => (
-                <Tooltip
-                  key={c.id}
-                  label={`${c.email} · ${c.role === "writer" ? "Can edit" : "Can view"}${
-                    c.status === "pending" ? " (invitation pending)" : ""
-                  }`}
-                >
-                  <Indicator
-                    disabled={c.status !== "pending"}
-                    size={14}
-                    color="var(--color-warning)"
-                    offset={3}
-                    position="bottom-end"
-                    label={<IconClock size={9} />}
-                    styles={{ indicator: { padding: 0 } }}
+              {others.slice(0, 4).map((c) => {
+                const isViewing = liveViewers.some((v) => v.email === c.email); // NEW
+                return (
+                  <Tooltip
+                    key={c.id}
+                    label={`${c.email} · ${c.role === "writer" ? "Can edit" : "Can view"}${
+                      c.status === "pending" ? " (invitation pending)" : isViewing ? " · Viewing now" : ""
+                    }`}
                   >
-                    <Avatar
-                      radius="xl"
-                      size={28}
-                      color={c.status === "pending" ? "gray" : "accent"}
-                      variant={c.status === "pending" ? "light" : "filled"}
+                    <Indicator
+                      disabled={c.status !== "pending"}
+                      size={14}
+                      color="var(--color-warning)"
+                      offset={3}
+                      position="bottom-end"
+                      label={<IconClock size={9} />}
+                      styles={{ indicator: { padding: 0 } }}
                     >
-                      {c.email.slice(0, 2).toUpperCase()}
-                    </Avatar>
-                  </Indicator>
-                </Tooltip>
-              ))}
+                      <Indicator
+                        disabled={!isViewing}
+                        size={10}
+                        color="teal"
+                        offset={2}
+                        position="top-end"
+                        processing
+                      >
+                        <Avatar
+                          radius="xl"
+                          size={28}
+                          color={c.status === "pending" ? "gray" : "accent"}
+                          variant={c.status === "pending" ? "light" : "filled"}
+                        >
+                          {c.email.slice(0, 2).toUpperCase()}
+                        </Avatar>
+                      </Indicator>
+                    </Indicator>
+                  </Tooltip>
+                );
+              })}
               {others.length > 4 && (
                 <Avatar radius="xl" size={28}>
                   +{others.length - 4}
@@ -356,7 +372,7 @@ export function DocumentsListPage() {
         enableSorting: false,
       }),
     ],
-    [isCompact]
+    [isCompact, viewersByDocument]
   );
 
   const table = useReactTable({
