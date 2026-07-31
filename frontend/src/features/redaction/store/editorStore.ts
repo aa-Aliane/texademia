@@ -8,6 +8,7 @@ interface EditorState {
   loadDocument: (documentId: string, files: ProjectFile[]) => void;
   setActiveFileId: (id: string) => void;
   updateActiveFileContent: (content: string) => void;
+  setFileContent: (fileId: string, content: string) => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -27,4 +28,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       files: files.map((f) => (f.id === activeFileId ? { ...f, content } : f)),
     });
   },
+  setFileContent: (fileId, content) => {
+      set((state) => ({
+        files: state.files.map((f) => (f.id === fileId ? { ...f, content } : f)),
+      }));
+    },
 }));
