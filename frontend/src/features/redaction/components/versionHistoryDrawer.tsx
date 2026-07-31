@@ -145,23 +145,55 @@ export function VersionHistoryDrawer({ opened, onClose, documentId }: Props) {
             {detail.diffs.map((fd: DocumentVersionDetail["diffs"][number]) => (
               <div key={fd.fileName}>
                 <Text size="sm" fw={600} mb={4}>{fd.fileName}</Text>
-                <div style={{ fontFamily: "monospace", fontSize: 12, border: "1px solid var(--mantine-color-gray-3)", borderRadius: 4, overflow: "hidden" }}>
-                  {fd.lines.map((line, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        whiteSpace: "pre-wrap",
-                        padding: "0 8px",
-                        backgroundColor:
-                          line.type === "add" ? "var(--mantine-color-green-1)" :
-                          line.type === "remove" ? "var(--mantine-color-red-1)" :
-                          "transparent",
-                      }}
-                    >
-                      {line.type === "add" ? "+ " : line.type === "remove" ? "- " : "  "}
-                      {line.content}
-                    </div>
-                  ))}
+
+                <div
+                  style={{
+                    fontFamily: "monospace",
+                    fontSize: 12,
+                    border: "1px solid var(--mantine-color-gray-3)",
+                    borderRadius: 6,
+                    overflow: "hidden"
+                  }}
+                >
+                  {fd.lines.map((line, i) => {
+                    const isAdd = line.type === "add";
+                    const isRemove = line.type === "remove";
+
+                    return (
+                      <div
+                        key={i}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          whiteSpace: "pre-wrap",
+                          padding: "2px 8px",
+
+                          // Light subtle backgrounds
+                          backgroundColor:
+                            isAdd ? "var(--color-accent)" :   // Subtle primary blue tint
+                            isRemove ? "var(--color-accent-light)" :  // Subtle red tint
+                            "transparent",
+
+                          // Colored left vertical accent bar
+                          borderLeft:
+                            isAdd ? "3px solid var(--color-accent-strong)" :
+                            isRemove ? "3px solid var(--color-accent-disabled)" :
+                            "3px solid transparent",
+
+                          // Subtle text tinting for better readability
+                          color:
+                            isAdd ? "var(--color-surface)" :
+                            isRemove ? "var(--color-danger)" :
+                            "inherit"
+                        }}
+                      >
+                        <span style={{ width: 16, display: "inline-block", opacity: 0.75 }}>
+                          {isAdd ? "+" : isRemove ? "-" : " "}
+                        </span>
+                        <span>{line.content}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))}
