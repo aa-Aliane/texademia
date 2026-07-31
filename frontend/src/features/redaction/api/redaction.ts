@@ -1,7 +1,7 @@
 // redaction/api/redaction.ts
 import { queryOptions } from "@tanstack/react-query";
 import { api, toPublicUrl } from "#/shared/api/client";
-import type { ProjectFile, RedactionDocument, Collaborator, CollaboratorRole, Invitation } from "../types/redaction";
+import type { ProjectFile, RedactionDocument, Collaborator, CollaboratorRole, Invitation, DocumentVersion, VersionTrigger, DocumentVersionDetail } from "../types/redaction";
 
 interface FileDto {
   id: string;
@@ -233,34 +233,61 @@ export async function declineInvitation(invitationId: string): Promise<void> {
 }
 
 
-interface FileVersionDto {
+interface DocumentVersionDto {
   id: string;
   created_at: string;
   trigger: VersionTrigger;
   author: string;
+  files_changed: string[];
+  summary: string;
 }
 
-function mapFileVersion(data: FileVersionDto): FileVersion {
-  return { id: data.id, createdAt: data.created_at, trigger: data.trigger, author: data.author };
+function mapDocumentVersion(d: DocumentVersionDto): DocumentVersion {
+  return { id: d.id, createdAt: d.created_at, trigger: d.trigger, author: d.author, filesChanged: d.files_changed, summary: d.summary };
 }
 
-export async function getFileVersions(documentId: string, fileId: string): Promise<FileVersion[]> {
-  const data = await api.get<FileVersionDto[]>(
-    `/api/texademia/documents/${documentId}/files/${fileId}/versions`
-  );
-  return data.map(mapFileVersion);
+export async function getDocumentVersions(documentId: string): Promise<DocumentVersion[]> {
+  const data = await api.get<DocumentVersionDto[]>(`/api/texademia/documents/${documentId}/versions`);
+  return data.map(mapDocumentVersion);
 }
 
-export async function restoreFileVersion(
+interface DiffLineDto {
+  type: "add" | "remove" | "context";
+  content: string;
+}
+interface FileDiffDto {
+  file_name: string;
+  lines: DiffLineDto[];
+}
+interface DocumentVersionDetailDto {
+  id: string;
+  created_at: string;
+  trigger: VersionTrigger;
+  author: string;
+  diffs: FileDiffDto[];
+}
+
+export async function getDocumentVersionDetail(
   documentId: string,
-  fileId: string,
   versionId: string
-): Promise<FileDto> {
-  return api.post<FileDto>(
-    `/api/texademia/documents/${documentId}/files/${fileId}/versions/${versionId}/restore`
+): Promise<DocumentVersionDetail> {
+  const data = await api.get<DocumentVersionDetailDto>(
+    `/api/texademia/documents/${documentId}/versions/${versionId}`
   );
+  return {
+    id: data.id,
+    createdAt: data.created_at,
+    trigger: data.trigger,
+    author: data.author,
+    diffs: data.diffs.map((d) => ({ fileName: d.file_name, lines: d.lines })),
+  };
 }
 
-export async function checkpointFile(documentId: string, fileId: string): Promise<void> {
-  await api.post(`/api/texademia/documents/${documentId}/files/${fileId}/checkpoint`);
+export async function restoreDocumentVersion(documentId: string, versionId: string): Promise<RedactionDocument> {
+  const data = await api.post<DocumentDto>(`/api/texademia/documents/${documentId}/versions/${versionId}/restore`);
+  return mapDocument(data);
+}
+
+export async function checkpointDocument(documentId: string): Promise<void> {
+  await api.post(`/api/texademia/documents/${documentId}/checkpoint`);
 }

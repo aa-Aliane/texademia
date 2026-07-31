@@ -70,3 +70,30 @@ export interface FileVersion {
   trigger: VersionTrigger;
   author: string;
 }
+
+export interface DocumentVersion {
+  id: string;
+  createdAt: string;
+  trigger: VersionTrigger;
+  author: string;
+  filesChanged: string[];
+  summary: string; // NEW
+}
+
+export interface DiffLine {
+  type: "add" | "remove" | "context";
+  content: string;
+}
+
+export interface FileDiff {
+  fileName: string;
+  lines: DiffLine[];
+}
+
+export interface DocumentVersionDetail {
+  id: string;
+  createdAt: string;
+  trigger: VersionTrigger;
+  author: string;
+  diffs: FileDiff[];
+}

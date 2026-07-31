@@ -28,8 +28,9 @@ from src.features.texademia.schemas.document import (
     DocumentUpdate,
     DocumentDuplicate,
     FileUpdate,
+    FileRead,
     CollaboratorRead,
-    FileVersionRead,
+    DocumentVersionRead,
 )
 from src.features.texademia.templates import get_template_files
 from src.features.texademia.services.compiler import (
@@ -42,10 +43,13 @@ from src.features.texademia.services.template_migrator import (
 )
 
 from src.features.texademia.services.versioning import (
-    create_checkpoint,
-    reconstruct_content_at,
+    create_document_checkpoint,
+    reconstruct_document_at,
+    delete_versions_after,
+    compute_commit_summary,
+    get_commit_diff,
 )
-
+from src.features.texademia.schemas.document import DocumentVersionDetail
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -242,6 +246,7 @@ async def create_document(
                 name=tf["name"],
                 language=tf["language"],
                 content=tf["content"],
+                last_checkpoint_content=tf["content"],
             )
         )
 
@@ -329,12 +334,11 @@ async def compile_document(
         document_id, session, user, require_write=True
     )
 
-    for f in document.files:
-        version = create_checkpoint(f, VersionTrigger.compile, user.email)
-        if version:
-            session.add(version)
-            session.add(f)
-    await session.commit()
+    commit = create_document_checkpoint(
+        session, document, VersionTrigger.compile, user.email
+    )
+    if commit:
+        await session.commit()
 
     main_file = next((f for f in document.files if f.name.endswith(".tex")), None)
     print(
@@ -393,7 +397,7 @@ async def duplicate_document(
                 name=f["name"],
                 language=f["language"],
                 content=f["content"],
-                # line_authors intentionally left unset — content/attribution changed
+                last_checkpoint_content=f["content"],
             )
         )
 
@@ -402,69 +406,101 @@ async def duplicate_document(
     return _to_document_read(new_document, "owner")
 
 
-@router.post(
-    "/{document_id}/files/{file_id}/checkpoint",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-async def checkpoint_file(
+@router.post("/{document_id}/checkpoint", status_code=status.HTTP_204_NO_CONTENT)
+async def checkpoint_document(
     document_id: uuid.UUID,
-    file_id: uuid.UUID,
     session: AsyncSession = Depends(get_db),
     user: User = Depends(current_active_user),
 ):
     """Called by the frontend after an idle-edit debounce window."""
-    file = await _get_owned_file(document_id, file_id, session, user)
-    version = create_checkpoint(file, VersionTrigger.idle, user.email)
-    if version:
-        session.add(version)
-        session.add(file)
+    document, _role = await _get_accessible_document(
+        document_id, session, user, require_write=True
+    )
+    commit = create_document_checkpoint(
+        session, document, VersionTrigger.idle, user.email
+    )
+    if commit:
         await session.commit()
 
 
-@router.get(
-    "/{document_id}/files/{file_id}/versions",
-    response_model=List[FileVersionRead],
-)
-async def list_file_versions(
+@router.get("/{document_id}/versions", response_model=List[DocumentVersionRead])
+async def list_document_versions(
     document_id: uuid.UUID,
-    file_id: uuid.UUID,
     session: AsyncSession = Depends(get_db),
     user: User = Depends(current_active_user),
 ):
-    file = await _get_owned_file(document_id, file_id, session, user)
-    return file.versions  # already ordered desc via relationship
+    document, _role = await _get_accessible_document(document_id, session, user)
+    commits = sorted(document.versions, key=lambda c: c.created_at, reverse=True)
+    file_names_by_id = {f.id: f.name for f in document.files}
+    return [
+        DocumentVersionRead(
+            id=c.id,
+            created_at=c.created_at,
+            trigger=c.trigger,
+            author=c.author,
+            files_changed=[
+                file_names_by_id.get(v.file_id, "unknown") for v in c.file_versions
+            ],
+            summary=compute_commit_summary(document, c),
+        )
+        for c in commits
+    ]
 
 
-@router.post(
-    "/{document_id}/files/{file_id}/versions/{version_id}/restore",
-    response_model=FileRead,
+@router.get(
+    "/{document_id}/versions/{version_id}", response_model=DocumentVersionDetail
 )
-async def restore_file_version(
+async def get_document_version_detail(
     document_id: uuid.UUID,
-    file_id: uuid.UUID,
     version_id: uuid.UUID,
     session: AsyncSession = Depends(get_db),
     user: User = Depends(current_active_user),
 ):
-    file = await _get_owned_file(document_id, file_id, session, user)
-
-    if not any(v.id == version_id for v in file.versions):
+    document, _role = await _get_accessible_document(document_id, session, user)
+    commit = next((c for c in document.versions if c.id == version_id), None)
+    if not commit:
         raise HTTPException(status_code=404, detail="Version not found")
 
-    restored_content = reconstruct_content_at(file.versions, file.content, version_id)
-
-    # checkpoint the pre-restore state so it isn't lost, then apply restore
-    pre_restore_checkpoint = create_checkpoint(file, VersionTrigger.restore, user.email)
-    if pre_restore_checkpoint:
-        session.add(pre_restore_checkpoint)
-
-    file.line_authors = _update_line_authors(
-        file.content, restored_content, file.line_authors, f"{user.email} (restore)"
+    diffs = get_commit_diff(document, version_id)
+    return DocumentVersionDetail(
+        id=commit.id,
+        created_at=commit.created_at,
+        trigger=commit.trigger,
+        author=commit.author,
+        diffs=diffs,
     )
-    file.content = restored_content
-    file.last_checkpoint_content = restored_content  # restore point is the new baseline
 
-    session.add(file)
+
+@router.post(
+    "/{document_id}/versions/{version_id}/restore", response_model=DocumentRead
+)
+async def restore_document_version(
+    document_id: uuid.UUID,
+    version_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    user: User = Depends(current_active_user),
+):
+    document, role = await _get_accessible_document(
+        document_id, session, user, require_write=True
+    )
+
+    if not any(c.id == version_id for c in document.versions):
+        raise HTTPException(status_code=404, detail="Version not found")
+
+    restored = reconstruct_document_at(document, version_id)
+
+    for f in document.files:
+        new_content = restored[f.id]
+        if new_content != f.content:
+            f.line_authors = _update_line_authors(
+                f.content, new_content, f.line_authors, f"{user.email} (restore)"
+            )
+            f.content = new_content
+        f.last_checkpoint_content = new_content
+        session.add(f)
+
+    await delete_versions_after(document, version_id, session)
+
     await session.commit()
-    await session.refresh(file)
-    return file
+    await session.refresh(document, attribute_names=["files", "collaborators"])
+    return _to_document_read(document, role)

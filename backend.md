@@ -2,44 +2,18 @@
 ```
 backend
 └── src
-    ├── database
-    │   └── session.py
     └── features
         └── texademia
             ├── models
             │   └── document.py
             ├── routers
             │   └── documents.py
-            ├── schemas
-            │   └── document.py
             └── services
-                ├── compiler.py
-                └── compiler_worker.py
+                └── versioning.py
 
 ```
 
 # Content:
-
-## src/database/session.py
-
-```py
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.orm import sessionmaker
-from sqlmodel.ext.asyncio.session import AsyncSession
-from typing import AsyncGenerator
-from src.config.settings import settings
-
-engine = create_async_engine(settings.DATABASE_URL, echo=False, future=True)
-
-async_session_maker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    async with async_session_maker() as session:
-        yield session
-
-```
-
 
 ## src/features/texademia/models/document.py
 
@@ -57,6 +31,58 @@ if TYPE_CHECKING:
     from src.features.auth.models import User
 
 _COMPILED_PDF_DIR = Path("compiled_pdfs")
+
+
+class VersionTrigger(str, enum.Enum):
+    compile = "compile"
+    idle = "idle"
+    restore = "restore"
+
+
+class DocumentFileVersion(SQLModel, table=True):
+    __tablename__ = "document_file_versions"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    file_id: uuid.UUID = Field(
+        foreign_key="document_files.id", nullable=False, index=True
+    )
+
+    # ADD THIS LINE:
+    commit_id: uuid.UUID = Field(
+        foreign_key="document_versions.id", nullable=False, index=True
+    )
+
+    created_at: datetime = Field(
+        default_factory=datetime.utcnow, nullable=False, index=True
+    )
+    trigger: VersionTrigger = Field(default=VersionTrigger.idle, nullable=False)
+    author: str = Field(nullable=False)
+    reverse_patch: str = Field(nullable=False)
+
+    file: "DocumentFile" = Relationship(back_populates="versions")
+    commit: "DocumentVersion" = Relationship(back_populates="file_versions")
+
+
+class DocumentVersion(SQLModel, table=True):
+    """A 'commit' — groups the file-level diffs made in one compile/idle/restore event."""
+
+    __tablename__ = "document_versions"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    document_id: uuid.UUID = Field(
+        foreign_key="documents.id", nullable=False, index=True
+    )
+    created_at: datetime = Field(
+        default_factory=datetime.utcnow, nullable=False, index=True
+    )
+    trigger: VersionTrigger = Field(default=VersionTrigger.idle, nullable=False)
+    author: str = Field(nullable=False)
+
+    document: "Document" = Relationship(back_populates="versions")
+    file_versions: List["DocumentFileVersion"] = Relationship(
+        back_populates="commit",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan", "lazy": "selectin"},
+    )
 
 
 class Document(SQLModel, table=True):
@@ -82,6 +108,11 @@ class Document(SQLModel, table=True):
         },
     )
 
+    versions: List["DocumentVersion"] = Relationship(
+        back_populates="document",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan", "lazy": "selectin"},
+    )
+
     @property
     def pdf_url(self) -> str | None:
         pdf_path = _COMPILED_PDF_DIR / f"{self.id}.pdf"
@@ -103,6 +134,19 @@ class DocumentFile(SQLModel, table=True):
     line_authors: list[dict] | None = Field(default=None, sa_column=Column(JSON))
 
     document: "Document" = Relationship(back_populates="files")
+
+    # snapshot of content at the last checkpoint — lets us diff cheaply
+    # without re-reading version history
+    last_checkpoint_content: str | None = Field(default=None)
+
+    versions: List["DocumentFileVersion"] = Relationship(
+        back_populates="file",
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "lazy": "selectin",
+            "order_by": "DocumentFileVersion.created_at.desc()",
+        },
+    )
 
 
 class CollaboratorRole(str, enum.Enum):
@@ -168,6 +212,8 @@ from src.features.texademia.models.document import (
     DocumentCollaborator,
     CollaboratorStatus,
     CollaboratorRole,
+    DocumentFileVersion,
+    VersionTrigger,
 )
 from src.features.texademia.schemas.document import (
     DocumentCreate,
@@ -175,7 +221,9 @@ from src.features.texademia.schemas.document import (
     DocumentUpdate,
     DocumentDuplicate,
     FileUpdate,
+    FileRead,
     CollaboratorRead,
+    DocumentVersionRead,
 )
 from src.features.texademia.templates import get_template_files
 from src.features.texademia.services.compiler import (
@@ -185,6 +233,11 @@ from src.features.texademia.services.compiler import (
 )
 from src.features.texademia.services.template_migrator import (
     migrate_files_to_template,
+)
+
+from src.features.texademia.services.versioning import (
+    create_document_checkpoint,
+    reconstruct_document_at,
 )
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -338,6 +391,7 @@ async def list_documents(
         _to_document_read(d, _role_for(d, user)) for d in shared
     ]
 
+
 async def list_accessible_document_ids(
     session: AsyncSession, user: User
 ) -> list[uuid.UUID]:
@@ -381,6 +435,7 @@ async def create_document(
                 name=tf["name"],
                 language=tf["language"],
                 content=tf["content"],
+                last_checkpoint_content=tf["content"],
             )
         )
 
@@ -468,6 +523,12 @@ async def compile_document(
         document_id, session, user, require_write=True
     )
 
+    commit = create_document_checkpoint(
+        session, document, VersionTrigger.compile, user.email
+    )
+    if commit:
+        await session.commit()
+
     main_file = next((f for f in document.files if f.name.endswith(".tex")), None)
     print(
         f"[compile] doc={document_id} template={document.template} "
@@ -525,7 +586,7 @@ async def duplicate_document(
                 name=f["name"],
                 language=f["language"],
                 content=f["content"],
-                # line_authors intentionally left unset — content/attribution changed
+                last_checkpoint_content=f["content"],
             )
         )
 
@@ -533,371 +594,193 @@ async def duplicate_document(
     await session.refresh(new_document, attribute_names=["files", "collaborators"])
     return _to_document_read(new_document, "owner")
 
-```
+
+@router.post("/{document_id}/checkpoint", status_code=status.HTTP_204_NO_CONTENT)
+async def checkpoint_document(
+    document_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    user: User = Depends(current_active_user),
+):
+    """Called by the frontend after an idle-edit debounce window."""
+    document, _role = await _get_accessible_document(
+        document_id, session, user, require_write=True
+    )
+    commit = create_document_checkpoint(
+        session, document, VersionTrigger.idle, user.email
+    )
+    if commit:
+        await session.commit()
 
 
-## src/features/texademia/schemas/document.py
-
-```py
-import uuid
-from datetime import datetime
-
-from pydantic import BaseModel
-from enum import Enum
-from pydantic import EmailStr
-
-
-class CollaboratorRole(str, Enum):
-    reader = "reader"
-    writer = "writer"
-
-
-class CollaboratorInvite(BaseModel):
-    email: EmailStr
-    role: CollaboratorRole = CollaboratorRole.reader
-
-
-class CollaboratorRoleUpdate(BaseModel):
-    role: CollaboratorRole
-
-
-class CollaboratorRead(BaseModel):
-    id: uuid.UUID
-    user_id: uuid.UUID
-    email: str
-    role: CollaboratorRole
-    status: str
-
-    model_config = {"from_attributes": True}
-
-
-class InvitationRead(BaseModel):
-    id: uuid.UUID  # collaborator row id
-    document_id: uuid.UUID
-    document_title: str
-    role: CollaboratorRole
-    invited_by_email: str
-
-
-class LineAuthor(BaseModel):
-    author: str
-    edited_at: datetime
-
-
-class FileRead(BaseModel):
-    id: uuid.UUID
-    name: str
-    language: str
-    content: str
-
-    line_authors: list[LineAuthor] | None = None
-
-    model_config = {"from_attributes": True}
-
-
-class DocumentCreate(BaseModel):
-    title: str = "Untitled"
-    template: str = "default"
-
-
-class DocumentRead(BaseModel):
-    id: uuid.UUID
-    title: str
-    template: str
-    created_at: datetime
-    updated_at: datetime
-    files: list[FileRead] = []
-    pdf_url: str | None = None
-    role: str = "owner"  #  "owner" | "writer" | "reader"
-    collaborators: list[CollaboratorRead] = []
-
-    model_config = {"from_attributes": True}
-
-
-class DocumentUpdate(BaseModel):
-    title: str | None = None
-    template: str | None = None
-
-
-class DocumentDuplicate(BaseModel):  # NEW
-    template: str | None = None
-    title: str | None = None
-
-
-class FileUpdate(BaseModel):
-    content: str
-
-
-class CompileResponse(BaseModel):
-    pdf_url: str
-
-```
-
-
-## src/features/texademia/services/compiler.py
-
-```py
-# src/features/texademia/services/compiler.py
-import uuid
-from pathlib import Path
-
-import redis
-from rq import Queue
-
-from src.config.settings import settings
-from src.features.texademia.models.document import (
-    DocumentFile,
-)
-
-redis_conn = redis.from_url(settings.REDIS_URL)
-compile_queue = Queue("latex_compile", connection=redis_conn)
-
-OUTPUT_DIR = Path("compiled_pdfs")
-OUTPUT_DIR.mkdir(exist_ok=True)
-
-
-class CompileError(Exception):
-    def __init__(self, message: str, log: str = ""):
-        self.message = message
-        self.log = log
-        super().__init__(message)
-
-
-def enqueue_compile_job(
-    document_id: uuid.UUID, files: list[DocumentFile], template: str
-) -> str:
-    """
-    Enqueues a compilation job and returns the job ID for polling.
-    """
-    files_data = [
-        {"id": str(f.id), "name": f.name, "language": f.language, "content": f.content}
-        for f in files
+@router.get("/{document_id}/versions", response_model=List[DocumentVersionRead])
+async def list_document_versions(
+    document_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    user: User = Depends(current_active_user),
+):
+    document, _role = await _get_accessible_document(document_id, session, user)
+    commits = sorted(document.versions, key=lambda c: c.created_at, reverse=True)
+    file_names_by_id = {f.id: f.name for f in document.files}
+    return [
+        DocumentVersionRead(
+            id=c.id,
+            created_at=c.created_at,
+            trigger=c.trigger,
+            author=c.author,
+            files_changed=[
+                file_names_by_id.get(v.file_id, "unknown") for v in c.file_versions
+            ],
+        )
+        for c in commits
     ]
 
-    from src.features.texademia.services.compiler_worker import compile_latex_job
 
-    job = compile_queue.enqueue(
-        compile_latex_job,
-        str(document_id),
-        files_data,
-        template,
-        job_timeout=180,
-        result_ttl=3600,
+@router.post(
+    "/{document_id}/versions/{version_id}/restore", response_model=DocumentRead
+)
+async def restore_document_version(
+    document_id: uuid.UUID,
+    version_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    user: User = Depends(current_active_user),
+):
+    document, role = await _get_accessible_document(
+        document_id, session, user, require_write=True
     )
-    return job.id
 
+    if not any(c.id == version_id for c in document.versions):
+        raise HTTPException(status_code=404, detail="Version not found")
 
-def get_job_status(job_id: str) -> dict:
-    """Poll job status from Redis."""
-    from rq.job import Job
+    restored = reconstruct_document_at(document, version_id)
 
-    job = Job.fetch(job_id, connection=redis_conn)
+    # snapshot the pre-restore state as its own commit, so restoring is itself undoable
+    pre_restore = create_document_checkpoint(
+        session, document, VersionTrigger.restore, user.email
+    )
+    if pre_restore:
+        session.add(pre_restore)
 
-    if job.is_finished:
-        return {
-            "status": "done",
-            "result": job.result,
-        }
-    elif job.is_failed:
-        meta = job.meta or {}
-        return {
-            "status": "error",
-            "error": str(job.exc_info) if job.exc_info else "Unknown error",
-            "log": meta.get("log", ""),
-        }
-    else:
-        meta = job.meta or {}
-        return {
-            "status": meta.get("status", "queued"),
-            "step": meta.get("step", "waiting"),
-            "percent": meta.get("percent", 0),
-            "message": meta.get("message", "Job is queued..."),
-        }
+    for f in document.files:
+        new_content = restored[f.id]
+        if new_content != f.content:
+            f.line_authors = _update_line_authors(
+                f.content, new_content, f.line_authors, f"{user.email} (restore)"
+            )
+            f.content = new_content
+        f.last_checkpoint_content = new_content
+        session.add(f)
+
+    await session.commit()
+    await session.refresh(document, attribute_names=["files", "collaborators"])
+    return _to_document_read(document, role)
 
 ```
 
 
-## src/features/texademia/services/compiler_worker.py
+## src/features/texademia/services/versioning.py
 
 ```py
-# src/features/texademia/services/compiler_worker.py
-import os
-import resource
-import shutil
-import subprocess
-import tempfile
-from pathlib import Path
+# src/features/texademia/services/versioning.py
+import uuid
+from datetime import datetime
+from diff_match_patch import diff_match_patch
+from sqlmodel.ext.asyncio.session import AsyncSession
 
-import redis
-from rq import get_current_job
+from src.features.texademia.models.document import (
+    Document,
+    DocumentFile,
+    DocumentFileVersion,
+    DocumentVersion,
+    VersionTrigger,
+)
 
-from src.config.settings import settings
-from src.features.texademia.assets import get_template_asset_files
-from src.features.texademia.services.pubsub import publish_document_event
-
-redis_conn = redis.from_url(settings.REDIS_URL)
-
-OUTPUT_DIR = Path("compiled_pdfs")
-OUTPUT_DIR.mkdir(exist_ok=True)
-
-COMPILE_TIMEOUT_SECONDS = 60  # per pdflatex/bibtex invocation
-MEMORY_LIMIT_BYTES = 768 * 1024 * 1024  # bumped a bit — 512MB was tight for real docs
+_dmp = diff_match_patch()
 
 
-class CompileError(Exception):
-    def __init__(self, message: str, log: str = ""):
-        self.message = message
-        self.log = log
-        super().__init__(message)
+def create_document_checkpoint(
+    session: AsyncSession, document: Document, trigger: VersionTrigger, author: str
+) -> DocumentVersion | None:
+    """
+    Creates one commit for the whole document, containing a reverse-patch
+    entry for every file whose content changed since its own last checkpoint.
+    Files with no changes are simply omitted from the commit — same as a
+    git commit only touching a subset of files. Returns None (no commit
+    created) if nothing changed anywhere.
+    """
+    now = datetime.utcnow()
+    pending: list[tuple[DocumentFile, str]] = []
 
-
-def _limit_memory():
-    try:
-        resource.setrlimit(resource.RLIMIT_AS, (MEMORY_LIMIT_BYTES, MEMORY_LIMIT_BYTES))
-    except (ValueError, OSError):
-        pass
-
-
-def _run(cmd: list[str], cwd: Path, timeout: int) -> tuple[int, str]:
-    proc = subprocess.Popen(
-        cmd,
-        cwd=cwd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        preexec_fn=_limit_memory,
-    )
-    try:
-        stdout, _ = proc.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.communicate()
-        return -1, f"Command timed out after {timeout}s: {' '.join(cmd)}"
-    return proc.returncode, stdout.decode(errors="replace")
-
-
-def compile_latex_job(document_id: str, files_data: list[dict], template: str) -> dict:
-    job = get_current_job()
-    combined_log = []
-
-    main_file = next((f for f in files_data if f["name"].endswith(".tex")), None)
-    print(
-        f"[worker] doc={document_id} template={template} "
-        f"files={[(f['name'], len(f['content'])) for f in files_data]} "
-        f"main_snippet={main_file['content'][:200]!r}"
-        if main_file
-        else "no-main"
-    )
-
-    def update_progress(step: str, percent: int, message: str = ""):
-        if job:
-            job.meta = {
-                "status": "running",
-                "step": step,
-                "percent": percent,
-                "message": message,
-            }
-            job.save_meta()
-
-    def fail(message: str):
-        full_log = "\n\n".join(combined_log)
-        if job:
-            job.meta = {**(job.meta or {}), "log": full_log}
-            job.save_meta()
-        publish_document_event(
-            document_id,
-            {
-                "type": "compile:update",
-                "phase": "error",
-                "error": message,
-                "log": full_log,
-            },
+    for f in document.files:
+        baseline = (
+            f.last_checkpoint_content
+            if f.last_checkpoint_content is not None
+            else f.content
         )
-        raise CompileError(message, log=full_log)
+        if baseline == f.content:
+            continue
+        patches = _dmp.patch_make(f.content, baseline)
+        pending.append((f, _dmp.patch_toText(patches)))
 
-    update_progress("preparing", 10, "Setting up compilation environment")
+    if not pending:
+        return None
 
-    if not shutil.which("pdflatex"):
-        fail("pdflatex is not installed.")
-
-    main_file = next((f for f in files_data if f["name"].endswith(".tex")), None)
-    if main_file is None:
-        fail("No .tex file found.")
-
-    main_stem = Path(main_file["name"]).stem
-    has_bib = any(f["name"].endswith(".bib") for f in files_data)
-
-    os.environ.setdefault("TMPDIR", "/var/tmp")
-
-    with tempfile.TemporaryDirectory(dir="/var/tmp") as tmp:
-        tmp_path = Path(tmp)
-
-        update_progress("copying", 15, "Copying template assets")
-        for asset in get_template_asset_files(template):
-            shutil.copy(asset, tmp_path / asset.name)
-
-        update_progress("writing", 20, "Writing source files")
-        for f in files_data:
-            (tmp_path / f["name"]).write_text(f["content"], encoding="utf-8")
-
-        pdflatex_cmd = [
-            "pdflatex",
-            "-interaction=nonstopmode",
-            "-halt-on-error",
-            "-no-shell-escape",
-            main_file["name"],
-        ]
-
-        update_progress("compiling", 35, "Running pdflatex (pass 1)")
-        rc, log = _run(pdflatex_cmd, tmp_path, COMPILE_TIMEOUT_SECONDS)
-        combined_log.append(f"--- pdflatex pass 1 ---\n{log}")
-        if rc != 0:
-            fail("LaTeX compilation failed on first pass.")
-
-        if has_bib:
-            update_progress("bibliography", 55, "Running bibtex")
-            rc, log = _run(["bibtex", main_stem], tmp_path, COMPILE_TIMEOUT_SECONDS)
-            combined_log.append(f"--- bibtex ---\n{log}")
-            # bibtex returns nonzero on warnings too, so don't hard-fail here —
-            # only bail if it clearly couldn't run at all.
-            if rc != 0 and "I found no" not in log and "I couldn't open" not in log:
-                pass  # keep going; pdflatex passes below will surface real issues
-
-            update_progress("compiling", 70, "Running pdflatex (pass 2)")
-            rc, log = _run(pdflatex_cmd, tmp_path, COMPILE_TIMEOUT_SECONDS)
-            combined_log.append(f"--- pdflatex pass 2 ---\n{log}")
-            if rc != 0:
-                fail("LaTeX compilation failed after bibtex.")
-
-            update_progress("compiling", 85, "Running pdflatex (pass 3)")
-            rc, log = _run(pdflatex_cmd, tmp_path, COMPILE_TIMEOUT_SECONDS)
-            combined_log.append(f"--- pdflatex pass 3 ---\n{log}")
-            if rc != 0:
-                fail("LaTeX compilation failed on final pass.")
-
-        pdf_path = tmp_path / f"{main_stem}.pdf"
-        if not pdf_path.exists():
-            fail("Compilation finished but no PDF was produced.")
-
-        update_progress("saving", 95, "Saving PDF output")
-        dest_path = OUTPUT_DIR / f"{document_id}.pdf"
-        shutil.copyfile(pdf_path, dest_path)
-
-    full_log = "\n\n".join(combined_log)
-    update_progress("done", 100, "Compilation complete")
-
-    publish_document_event(
-        document_id,
-        {
-            "type": "compile:update",
-            "phase": "done",
-            "pdfUrl": f"/static/compiled/{document_id}.pdf",
-        },
+    commit = DocumentVersion(
+        document_id=document.id, trigger=trigger, author=author, created_at=now
     )
-    return {
-        "status": "success",
-        "pdf_url": f"/static/compiled/{document_id}.pdf",
-        "log": full_log,
-    }
+    session.add(commit)
+
+    for f, reverse_patch in pending:
+        version = DocumentFileVersion(
+            file_id=f.id,
+            commit_id=commit.id,  # id is client-generated (uuid4 default_factory), safe pre-flush
+            trigger=trigger,
+            author=author,
+            reverse_patch=reverse_patch,
+            created_at=now,
+        )
+        f.last_checkpoint_content = f.content
+        session.add(version)
+        session.add(f)
+
+    return commit
+
+
+def reconstruct_document_at(
+    document: Document, target_commit_id: uuid.UUID
+) -> dict[uuid.UUID, str]:
+    """
+    Returns {file_id: content} reconstructing every file's content as it was
+    right after `target_commit_id` was made — i.e. undoing every commit
+    strictly newer than the target, per file, using each file's own
+    reverse-patch chain.
+    """
+    commits_desc = sorted(document.versions, key=lambda c: c.created_at, reverse=True)
+    target_index = next(
+        (i for i, c in enumerate(commits_desc) if c.id == target_commit_id), None
+    )
+    if target_index is None:
+        raise ValueError("Commit not found for this document")
+
+    newer_commit_ids = {c.id for c in commits_desc[:target_index]}
+
+    result: dict[uuid.UUID, str] = {}
+    for f in document.files:
+        content = f.content
+        file_versions = sorted(
+            [v for v in f.versions if v.commit_id in newer_commit_ids],
+            key=lambda v: v.created_at,
+            reverse=True,
+        )
+        for v in file_versions:
+            patches = _dmp.patch_fromText(v.reverse_patch)
+            content, results = _dmp.patch_apply(patches, content)
+            if not all(results):
+                raise ValueError(
+                    f"Patch failed to apply cleanly for version {v.id} (file {f.id})"
+                )
+        result[f.id] = content
+
+    return result
 
 ```
 

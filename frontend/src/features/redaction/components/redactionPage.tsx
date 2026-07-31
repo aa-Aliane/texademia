@@ -13,6 +13,7 @@ import { useDocumentSocket } from "../hooks/useDocumentSocket";
 import { documentQueryOptions, duplicateDocument } from "../api/redaction";
 import { useRedactionStore } from "../store/redactionStore";
 import { useCurrentUser } from "#/features/auth";
+import { VersionHistoryDrawer } from "./versionHistoryDrawer";
 
 interface RedactionPageProps {
   documentId: string;
@@ -160,6 +161,7 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
         dirtyCount={dirtyCount}
         onDuplicateClick={() => setDialog(documentId, "duplicate", true)}
         onShareClick={() => setDialog(documentId, "collaborators", true)}
+        onHistoryClick={() => setDialog(documentId, "history", true)}
         role={document.role}
       />
 
@@ -200,6 +202,11 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
       <CollaboratorsDialog
         opened={!!dialogState?.collaborators}
         onClose={() => setDialog(documentId, "collaborators", false)}
+        documentId={documentId}
+      />
+      <VersionHistoryDrawer
+        opened={!!dialogState?.history}
+        onClose={() => setDialog(documentId, "history", false)}
         documentId={documentId}
       />
     </div>

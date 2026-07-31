@@ -26,16 +26,43 @@ class DocumentFileVersion(SQLModel, table=True):
     file_id: uuid.UUID = Field(
         foreign_key="document_files.id", nullable=False, index=True
     )
+
+    # ADD THIS LINE:
+    commit_id: uuid.UUID = Field(
+        foreign_key="document_versions.id", nullable=False, index=True
+    )
+
     created_at: datetime = Field(
         default_factory=datetime.utcnow, nullable=False, index=True
     )
     trigger: VersionTrigger = Field(default=VersionTrigger.idle, nullable=False)
     author: str = Field(nullable=False)
-    # diff-match-patch patch text: applying it to the file's CURRENT content
-    # at the time of restore reconstructs the content as it was at this checkpoint.
     reverse_patch: str = Field(nullable=False)
 
     file: "DocumentFile" = Relationship(back_populates="versions")
+    commit: "DocumentVersion" = Relationship(back_populates="file_versions")
+
+
+class DocumentVersion(SQLModel, table=True):
+    """A 'commit' — groups the file-level diffs made in one compile/idle/restore event."""
+
+    __tablename__ = "document_versions"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    document_id: uuid.UUID = Field(
+        foreign_key="documents.id", nullable=False, index=True
+    )
+    created_at: datetime = Field(
+        default_factory=datetime.utcnow, nullable=False, index=True
+    )
+    trigger: VersionTrigger = Field(default=VersionTrigger.idle, nullable=False)
+    author: str = Field(nullable=False)
+
+    document: "Document" = Relationship(back_populates="versions")
+    file_versions: List["DocumentFileVersion"] = Relationship(
+        back_populates="commit",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan", "lazy": "selectin"},
+    )
 
 
 class Document(SQLModel, table=True):
@@ -59,6 +86,11 @@ class Document(SQLModel, table=True):
             "cascade": "all, delete-orphan",
             "lazy": "selectin",
         },
+    )
+
+    versions: List["DocumentVersion"] = Relationship(
+        back_populates="document",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan", "lazy": "selectin"},
     )
 
     @property

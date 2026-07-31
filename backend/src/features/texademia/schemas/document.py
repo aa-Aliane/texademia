@@ -4,6 +4,7 @@ from datetime import datetime
 from pydantic import BaseModel
 from enum import Enum
 from pydantic import EmailStr
+from typing import List
 
 from src.features.texademia.models.document import VersionTrigger
 
@@ -100,3 +101,30 @@ class FileVersionRead(BaseModel):
     author: str
 
     model_config = {"from_attributes": True}
+
+
+class DocumentVersionRead(BaseModel):
+    id: uuid.UUID
+    created_at: datetime
+    trigger: VersionTrigger
+    author: str
+    files_changed: list[str]
+    summary: str
+
+
+class DiffLine(BaseModel):
+    type: str  # "add" | "remove" | "context"
+    content: str
+
+
+class FileDiff(BaseModel):
+    file_name: str
+    lines: List[DiffLine]
+
+
+class DocumentVersionDetail(BaseModel):
+    id: uuid.UUID
+    created_at: datetime
+    trigger: VersionTrigger
+    author: str
+    diffs: List[FileDiff]

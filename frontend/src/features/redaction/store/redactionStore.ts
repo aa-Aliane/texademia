@@ -4,12 +4,12 @@ import { create } from "zustand";
 interface RedactionUIStore {
   activeTabs: Record<string, string>;
   activeFiles: Record<string, string>;
-  dialogs: Record<string, { duplicate?: boolean; collaborators?: boolean }>;
+  dialogs: Record<string, { duplicate?: boolean; collaborators?: boolean; history?: boolean }>;
   dirtyFiles: Record<string, Set<string>>;
 
   setActiveTab: (documentId: string, tabId: string) => void;
   setActiveFile: (documentId: string, fileId: string) => void;
-  setDialog: (documentId: string, dialog: "duplicate" | "collaborators", open: boolean) => void;
+  setDialog: (documentId: string, dialog: "duplicate" | "collaborators" | "history", open: boolean) => void;
   markFileDirty: (documentId: string, fileId: string) => void;
   clearDirty: (documentId: string) => void;
 }

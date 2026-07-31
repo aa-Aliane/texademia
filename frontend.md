@@ -7,9 +7,8 @@ frontend
             ├── api
             │   └── redaction.ts
             ├── components
-            │   └── documentMenu.tsx
-            ├── hooks
-            │   └── useCompileDocument.ts
+            │   ├── blameExtension.ts
+            │   └── versionHistoryDrawer.tsx
             ├── store
             │   └── editorStore.ts
             └── types
@@ -25,7 +24,7 @@ frontend
 // redaction/api/redaction.ts
 import { queryOptions } from "@tanstack/react-query";
 import { api, toPublicUrl } from "#/shared/api/client";
-import type { ProjectFile, RedactionDocument, Collaborator, CollaboratorRole, Invitation } from "../types/redaction";
+import type { ProjectFile, RedactionDocument, Collaborator, CollaboratorRole, Invitation, DocumentVersion, VersionTrigger } from "../types/redaction";
 
 interface FileDto {
   id: string;
@@ -256,225 +255,196 @@ export async function declineInvitation(invitationId: string): Promise<void> {
   await api.post(`/api/texademia/invitations/${invitationId}/decline`);
 }
 
-```
 
-
-## src/features/redaction/components/documentMenu.tsx
-
-```tsx
-// redaction/components/documentMenu.tsx
-import { Menu, ActionIcon, Badge, Text } from "@mantine/core";
-import {
-  IconDots,
-  IconCopy,
-  IconDownload,
-  IconFileZip,
-  IconTrash,
-  IconUsers,
-} from "@tabler/icons-react";
-
-interface DocumentMenuProps {
-  template: string;
-  pdfUrl: string | null;
-  onDuplicateClick: () => void;
-  onShareClick: () => void;
-  role: string; // "owner" | "writer" | "reader"
+interface DocumentVersionDto {
+  id: string;
+  created_at: string;
+  trigger: VersionTrigger;
+  author: string;
+  files_changed: string[];
 }
 
-const TEMPLATE_LABELS: Record<string, string> = {
-  default: "Default",
-  arxiv: "arXiv",
-  ieee: "IEEE",
-  acl: "ACL",
-};
+function mapDocumentVersion(d: DocumentVersionDto): DocumentVersion {
+  return { id: d.id, createdAt: d.created_at, trigger: d.trigger, author: d.author, filesChanged: d.files_changed };
+}
 
-export function DocumentMenu({ template, pdfUrl, onDuplicateClick, onShareClick, role }: DocumentMenuProps) {
-  return (
-    <Menu position="bottom-end" shadow="md" width={240}>
-      <Menu.Target>
-        <ActionIcon variant="subtle" size="sm" aria-label="Document options">
-          <IconDots size={18} />
-        </ActionIcon>
-      </Menu.Target>
+export async function getDocumentVersions(documentId: string): Promise<DocumentVersion[]> {
+  const data = await api.get<DocumentVersionDto[]>(`/api/texademia/documents/${documentId}/versions`);
+  return data.map(mapDocumentVersion);
+}
 
-      <Menu.Dropdown>
-        <Menu.Label>
-          <Text size="xs" c="dimmed" span>Template</Text>{" "}
-          <Badge size="xs" variant="light">
-            {TEMPLATE_LABELS[template] ?? template}
-          </Badge>
-        </Menu.Label>
+export async function restoreDocumentVersion(documentId: string, versionId: string): Promise<RedactionDocument> {
+  const data = await api.post<DocumentDto>(`/api/texademia/documents/${documentId}/versions/${versionId}/restore`);
+  return mapDocument(data);
+}
 
-        {role === "owner" && (
-          <Menu.Item leftSection={<IconUsers size={16} />} onClick={onShareClick}>
-            Manage collaborators
-          </Menu.Item>
-        )}
-
-        <Menu.Item
-          leftSection={<IconDownload size={16} />}
-          component="a"
-          href={pdfUrl ?? undefined}
-          target="_blank"
-          rel="noopener noreferrer"
-          disabled={!pdfUrl}
-        >
-          {pdfUrl ? "Download PDF" : "Download PDF (compile first)"}
-        </Menu.Item>
-
-        <Menu.Item leftSection={<IconFileZip size={16} />} disabled>
-          Download source (.zip)
-        </Menu.Item>
-
-        <Menu.Item leftSection={<IconCopy size={16} />} onClick={onDuplicateClick}>
-          Duplicate
-        </Menu.Item>
-
-        <Menu.Divider />
-
-        <Menu.Item color="red" leftSection={<IconTrash size={16} />} disabled>
-          Delete document
-        </Menu.Item>
-      </Menu.Dropdown>
-    </Menu>
-  );
+export async function checkpointDocument(documentId: string): Promise<void> {
+  await api.post(`/api/texademia/documents/${documentId}/checkpoint`);
 }
 
 ```
 
 
-## src/features/redaction/hooks/useCompileDocument.ts
+## src/features/redaction/components/blameExtension.ts
 
 ```ts
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { startCompileJob, pollCompileStatus } from "../api/redaction";
-import type { ProjectFile } from "../types/redaction";
-import { useRedactionStore } from "../store/redactionStore";
-import { LOG_TAB_ID, PREVIEW_TAB_ID } from "../components/fileTabs";
+import { StateField, StateEffect, type EditorState } from "@codemirror/state";
+import { EditorView, Decoration, WidgetType, type DecorationSet } from "@codemirror/view";
+import type { LineAuthor } from "../types/redaction";
 
-export type CompilePhase = "idle" | "saving" | "queued" | "running" | "done" | "error";
+export const setLineAuthors = StateEffect.define<LineAuthor[]>();
 
-export interface CompileState {
-  phase: CompilePhase;
-  progress: number;
-  message: string;
-  pdfUrl: string | null;
-  error: string | null;
-  log: string | null;
-}
-
-function toPublicUrl(path: string): string {
-  if (path.startsWith("http")) return path;
-  return `${import.meta.env.VITE_API_URL ?? ""}${path}`;
-}
-
-function addCacheBuster(url: string, key: string): string {
-  const separator = url.includes("?") ? "&" : "?";
-  return `${url}${separator}v=${key}`;
-}
-
-export function useCompileDocument(
-  documentId: string,
-  initialPdfUrl: string | null,
-  liveRefreshKey: number = 0
-) {
-  const queryClient = useQueryClient();
-  const setActiveTab = useRedactionStore((state) => state.setActiveTab);
-
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [pdfCacheKey] = useState(() => `${Date.now()}`);
-
-  const startMutation = useMutation({
-    mutationFn: (files: ProjectFile[]) => startCompileJob(documentId, files),
-    onSuccess: (data) => {
-      setJobId(data.jobId);
-      queryClient.invalidateQueries({ queryKey: ["document", documentId] });
-    },
-  });
-
-  const pollQuery = useQuery({
-    queryKey: ["compile-job", jobId],
-    queryFn: () => pollCompileStatus(jobId!),
-    enabled: !!jobId,
-    refetchInterval: (query) => {
-      const data = query.state.data;
-
-      // Handle side-effects cleanly inside the query callback when the job finishes
-      if (data?.status === "done" && jobId) {
-        setActiveTab(documentId, PREVIEW_TAB_ID);
-        useRedactionStore.getState().clearDirty(documentId);
-        setJobId(null);
-        return false;
-      }
-
-      if (data?.status === "error" && jobId) {
-        if (data.log) {
-          setActiveTab(documentId, LOG_TAB_ID);
-        }
-        setJobId(null);
-        return false;
-      }
-
-      return 800;
-    },
-  });
-
-  const getPhase = (): CompilePhase => {
-    if (startMutation.isPending) return "saving";
-    if (!pollQuery.data) {
-      if (jobId) return "queued";
-      return initialPdfUrl ? "done" : "idle";
+export const lineAuthorsField = StateField.define<LineAuthor[]>({
+  create: () => [],
+  update(value, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setLineAuthors)) return effect.value;
     }
-    if (pollQuery.data.status === "done") return "done";
-    if (pollQuery.data.status === "error") return "error";
-    if (pollQuery.data.status === "running") return "running";
-    return "queued";
-  };
+    return value;
+  },
+});
 
-  const phase = getPhase();
-  const progress = pollQuery.data?.percent ?? (startMutation.isPending ? 5 : 0);
-  const message = pollQuery.data?.message ?? (startMutation.isPending ? "Saving files..." : "Ready");
+function formatRelative(iso: string): string {
+  const diffMin = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay === 1) return "Yesterday";
+  if (diffDay < 7) return `${diffDay}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
 
-  const pdfUrl = pollQuery.data?.result?.pdf_url
-    ? addCacheBuster(toPublicUrl(pollQuery.data.result.pdf_url), jobId ?? pdfCacheKey)
-    : !jobId && initialPdfUrl
-    ? addCacheBuster(initialPdfUrl, `${pdfCacheKey}-${liveRefreshKey}`)
-    : null;
+class BlameWidget extends WidgetType {
+  constructor(private author: string, private editedAt: string) {
+    super();
+  }
+  eq(other: BlameWidget) {
+    return other.author === this.author && other.editedAt === this.editedAt;
+  }
+  toDOM() {
+    const span = document.createElement("span");
+    span.textContent = `  ${this.author}, ${formatRelative(this.editedAt)}`;
+    Object.assign(span.style, {
+      opacity: "0.45",
+      fontStyle: "italic",
+      fontSize: "0.85em",
+      pointerEvents: "none",
+      userSelect: "none",
+    });
+    return span;
+  }
+  ignoreEvent() {
+    return true;
+  }
+}
 
-  const error =
-    pollQuery.data?.status === "error"
-      ? pollQuery.data.error ?? "Compilation failed"
-      : startMutation.isError
-      ? (startMutation.error as Error)?.message ?? "Failed to start compilation"
-      : null;
+function buildDecorations(state: EditorState): DecorationSet {
+  const authors = state.field(lineAuthorsField, false) ?? [];
+  if (!authors.length) return Decoration.none;
 
-  const log = pollQuery.data?.log ?? pollQuery.data?.result?.log ?? null;
+  const cursorLine = state.doc.lineAt(state.selection.main.head);
+  const meta = authors[cursorLine.number - 1];
+  if (!meta) return Decoration.none;
 
-  const isActive = phase === "saving" || phase === "queued" || phase === "running";
-  const isDone = phase === "done";
-  const isError = phase === "error";
+  return Decoration.set([
+    Decoration.widget({ widget: new BlameWidget(meta.author, meta.editedAt), side: 1 }).range(
+      cursorLine.to
+    ),
+  ]);
+}
 
-  const compile = (files: ProjectFile[]) => {
-    setJobId(null);
-    queryClient.removeQueries({ queryKey: ["compile-job"] });
-    startMutation.mutate(files);
-  };
+export const blameLinePlugin = EditorView.decorations.compute(
+  [lineAuthorsField, "selection"],
+  buildDecorations
+);
 
-  return {
-    compile,
-    phase,
-    progress,
-    message,
-    pdfUrl,
-    error,
-    log,
-    isActive,
-    isDone,
-    isError,
-    jobId,
-    pollData: pollQuery.data,
-  };
+export const blameExtension = [lineAuthorsField, blameLinePlugin];
+
+```
+
+
+## src/features/redaction/components/versionHistoryDrawer.tsx
+
+```tsx
+import { Drawer, Timeline, Text, Button, Badge, Group, Loader } from "@mantine/core";
+import { IconFileCheck, IconClock, IconHistoryToggle } from "@tabler/icons-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getDocumentVersions, restoreDocumentVersion, documentQueryOptions } from "../api/redaction";
+import type { VersionTrigger } from "../types/redaction";
+
+const TRIGGER_ICON: Record<VersionTrigger, JSX.Element> = {
+  compile: <IconFileCheck size={14} />,
+  idle: <IconClock size={14} />,
+  restore: <IconHistoryToggle size={14} />,
+};
+
+const TRIGGER_LABEL: Record<VersionTrigger, string> = {
+  compile: "Compile",
+  idle: "Auto-save",
+  restore: "Restored",
+};
+
+interface Props {
+  opened: boolean;
+  onClose: () => void;
+  documentId: string;
+}
+
+export function VersionHistoryDrawer({ opened, onClose, documentId }: Props) {
+  const queryClient = useQueryClient();
+
+  const { data: versions, isLoading } = useQuery({
+    queryKey: ["document-versions", documentId],
+    queryFn: () => getDocumentVersions(documentId),
+    enabled: opened,
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: (versionId: string) => restoreDocumentVersion(documentId, versionId),
+    onSuccess: (restoredDocument) => {
+      queryClient.setQueryData(documentQueryOptions(documentId).queryKey, restoredDocument);
+      queryClient.invalidateQueries({ queryKey: ["document-versions", documentId] });
+      onClose();
+    },
+  });
+
+  return (
+    <Drawer opened={opened} onClose={onClose} title="Document history" position="right" size="sm">
+      {isLoading && <Loader size="sm" />}
+
+      {!isLoading && (!versions || versions.length === 0) && (
+        <Text size="sm" c="dimmed">No checkpoints yet for this document.</Text>
+      )}
+
+      <Timeline bulletSize={22} lineWidth={2}>
+        {versions?.map((v) => (
+          <Timeline.Item key={v.id} bullet={TRIGGER_ICON[v.trigger]} title={
+            <Group gap="xs">
+              <Badge size="xs" variant="light">{TRIGGER_LABEL[v.trigger]}</Badge>
+              <Text size="xs" c="dimmed">{new Date(v.createdAt).toLocaleString()}</Text>
+            </Group>
+          }>
+            <Text size="xs" c="dimmed" mb={2}>{v.author}</Text>
+            <Group gap={4} mb={6}>
+              {v.filesChanged.map((name) => (
+                <Badge key={name} size="xs" variant="dot" color="gray">{name}</Badge>
+              ))}
+            </Group>
+            <Button
+              size="xs"
+              variant="light"
+              loading={restoreMutation.isPending && restoreMutation.variables === v.id}
+              onClick={() => restoreMutation.mutate(v.id)}
+            >
+              Restore this version
+            </Button>
+          </Timeline.Item>
+        ))}
+      </Timeline>
+    </Drawer>
+  );
 }
 
 ```
@@ -493,12 +463,16 @@ interface EditorState {
   loadDocument: (documentId: string, files: ProjectFile[]) => void;
   setActiveFileId: (id: string) => void;
   updateActiveFileContent: (content: string) => void;
+  setFileContent: (fileId: string, content: string) => void;
+  historyOpened: boolean,
+  setHistoryOpened: (opened: boolean) => void,
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
   documentId: null,
   files: [],
   activeFileId: null,
+  historyOpened: false,
   loadDocument: (documentId, files) =>
     set({
       documentId,
@@ -512,6 +486,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       files: files.map((f) => (f.id === activeFileId ? { ...f, content } : f)),
     });
   },
+  setFileContent: (fileId, content) => {
+      set((state) => ({
+        files: state.files.map((f) => (f.id === fileId ? { ...f, content } : f)),
+      }));
+  },
+
+  setHistoryOpened: (opened:boolean) => set({ historyOpened: opened }),
 }));
 
 ```
@@ -582,6 +563,23 @@ export interface Invitation {
   documentTitle: string;
   role: CollaboratorRole;
   invitedByEmail: string;
+}
+
+export type VersionTrigger = "compile" | "idle" | "restore";
+
+export interface FileVersion {
+  id: string;
+  createdAt: string;
+  trigger: VersionTrigger;
+  author: string;
+}
+
+export interface DocumentVersion {
+  id: string;
+  createdAt: string;
+  trigger: VersionTrigger;
+  author: string;
+  filesChanged: string[];
 }
 
 ```

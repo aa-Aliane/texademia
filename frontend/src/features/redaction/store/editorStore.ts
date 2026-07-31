@@ -9,12 +9,15 @@ interface EditorState {
   setActiveFileId: (id: string) => void;
   updateActiveFileContent: (content: string) => void;
   setFileContent: (fileId: string, content: string) => void;
+  historyOpened: boolean,
+  setHistoryOpened: (opened: boolean) => void,
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
   documentId: null,
   files: [],
   activeFileId: null,
+  historyOpened: false,
   loadDocument: (documentId, files) =>
     set({
       documentId,
@@ -32,5 +35,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       set((state) => ({
         files: state.files.map((f) => (f.id === fileId ? { ...f, content } : f)),
       }));
-    },
+  },
+
+  setHistoryOpened: (opened:boolean) => set({ historyOpened: opened }),
 }));

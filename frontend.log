@@ -1,50 +1,33 @@
-texademia_frontend  |       '  sorting: SortingState;\n' +
-texademia_frontend  |       '  setSorting: (sorting: SortingState) => void;\n' +
-texademia_frontend  |       '\n' +
-texademia_frontend  |       '}\n' +
-texademia_frontend  |       '\n' +
-texademia_frontend  |       'export const useDocumentsUIStore = create<DocumentsUIStoreState>((set)   => ({\n' +
-texademia_frontend  |       '  // dialog opend state\n' +
-texademia_frontend  |       '  dialogOpened: false,\n' +
-texademia_frontend  |       '  setDialogOpened: (open: boolean) => set({ dialogOpened: open }),\n' +
-texademia_frontend  |       '\n' +
-texademia_frontend  |       '  // duplicate target state\n' +
-texademia_frontend  |       '  duplicateTarget: null,\n' +
-texademia_frontend  |       '  setDuplicateTarget: (target: RedactionDocument | null) => set({ duplicateTarget: target }),\n' +
-texademia_frontend  |       '\n' +
-texademia_frontend  |       '  // delete target state\n' +
-texademia_frontend  |       '  deleteTarget: null,\n' +
-texademia_frontend  |       '  setDeleteTarget: (target: RedactionDocument | null) => set({ deleteTarget: target }),\n' +
-texademia_frontend  |       '\n' +
-texademia_frontend  |       '  // collaborators target state\n' +
-texademia_frontend  |       '  collaboratorsTarget: null,\n' +
-texademia_frontend  |       '  setCollaboratorsTarget: (target: RedactionDocument | null) => set({ collaboratorsTarget: target }),\n' +
-texademia_frontend  |       '\n' +
-texademia_frontend  |       '   // global filter state\n' +
-texademia_frontend  |       '   globalFilter: "",\n' +
-texademia_frontend  |       '  setGlobalFilter: (filter: string) => set({ globalFilter: filter }),\n' +
-texademia_frontend  |       '\n' +
-texademia_frontend  |       '  // sorting state\n' +
-texademia_frontend  |       '  sorting :  [{ id: "updatedAt", desc: true },\n' +
-texademia_frontend  |       '  setSorting: (sorting: SortingState) => set({ sorting }),\n' +
-texademia_frontend  |       '\n' +
-texademia_frontend  |       '}));\n',
-texademia_frontend  |     runnerError: Error: RunnerError
-texademia_frontend  |         at reviveInvokeError (file:///app/node_modules/vite/dist/node/module-runner.js:550:64)
-texademia_frontend  |         at Object.invoke (file:///app/node_modules/vite/dist/node/module-runner.js:623:11)
-texademia_frontend  |         at async ModuleRunner.getModuleInformation (file:///app/node_modules/vite/dist/node/module-runner.js:1198:7)
-texademia_frontend  |         at async request (file:///app/node_modules/vite/dist/node/module-runner.js:1215:83)
-texademia_frontend  |         at async eval (/app/src/features/redaction/components/documentsListPage.tsx:52:1)
-texademia_frontend  |         at async ESModulesEvaluator.runInlinedModule (file:///app/node_modules/vite/dist/node/module-runner.js:1005:3)
-texademia_frontend  |         at async ModuleRunner.directRequest (file:///app/node_modules/vite/dist/node/module-runner.js:1258:59)
-texademia_frontend  |         at async ModuleRunner.cachedRequest (file:///app/node_modules/vite/dist/node/module-runner.js:1165:73)
-texademia_frontend  |         at async eval (/app/src/features/redaction/index.ts:3:1)
-texademia_frontend  |         at async ESModulesEvaluator.runInlinedModule (file:///app/node_modules/vite/dist/node/module-runner.js:1005:3)
-texademia_frontend  |   },
-texademia_frontend  |   status: 500,
-texademia_frontend  |   statusText: undefined,
-texademia_frontend  |   headers: undefined,
-texademia_frontend  |   data: undefined,
-texademia_frontend  |   body: undefined,
-texademia_frontend  |   unhandled: true
+texademia_frontend  | 
+texademia_frontend  | > dev
+texademia_frontend  | > vite dev --port 3000 --host 0.0.0.0
+texademia_frontend  | 
+texademia_frontend  | 3:56:54 PM [vite] (client) Re-optimizing dependencies because vite config has changed
+texademia_frontend  | 
+texademia_frontend  |   VITE v8.1.5  ready in 6620 ms
+texademia_frontend  | 
+texademia_frontend  |   ➜  Local:   http://localhost:3000/
+texademia_frontend  |   ➜  Network: http://172.19.0.6:3000/
+texademia_frontend  | 3:56:56 PM [vite] (client) [optimizer] bundling dependencies...
+texademia_frontend  | [Client] src/features/redaction/hooks/useDocumentSocket.ts:161:9 [ws] error {
+texademia_frontend  |   type: 'error',
+texademia_frontend  |   target: {},
+texademia_frontend  |   currentTarget: {},
+texademia_frontend  |   defaultPrevented: false
 texademia_frontend  | }
+texademia_frontend  | [Client] src/features/redaction/hooks/useDocumentSocket.ts:137:9 [ws] closed 1006 
+texademia_frontend  | [Client] src/features/redaction/hooks/useDocumentSocket.ts:156:9 [ws] reconnecting in 15000ms
+texademia_frontend  | [Client] %o
+texademia_frontend  | 
+texademia_frontend  | %s
+texademia_frontend  | 
+texademia_frontend  | %s
+texademia_frontend  |  {
+texademia_frontend  |   name: 'ApiError',
+texademia_frontend  |   message: 'Unauthorized',
+texademia_frontend  |   stack: 'ApiError@http://localhost:3000/src/shared/api/client.ts:5:3\n' +
+texademia_frontend  |     'request@http://localhost:3000/src/shared/api/client.ts:64:9\n'
+texademia_frontend  | } The above error occurred in the <MatchInnerImpl> component. React will try to recreate this component tree from scratch using the error boundary you provided, CatchBoundaryImpl.
+texademia_frontend  | [Client] Warning: The following error wasn't caught by any route! At the very least, consider setting an 'errorComponent' in your RootRoute!
+texademia_frontend  | [Client] Warning: Unauthorized
+texademia_frontend  | 3:57:05 PM [vite] (ssr) connected.

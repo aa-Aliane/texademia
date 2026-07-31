@@ -1,50 +1,50 @@
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/starlette/middleware/cors.py", line 96, in __call__
-texademia_backend  |     await self.simple_response(scope, receive, send, request_headers=headers)
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/starlette/middleware/cors.py", line 154, in simple_response
-texademia_backend  |     await self.app(scope, receive, send)
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
-texademia_backend  |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-texademia_backend  |     raise exc
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
-texademia_backend  |     await app(scope, receive, sender)
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
-texademia_backend  |     await self.app(scope, receive, send)
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/starlette/routing.py", line 660, in __call__
-texademia_backend  |     await self.middleware_stack(scope, receive, send)
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 2685, in app
-texademia_backend  |     await route.handle(scope, receive, send)
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 1766, in handle
-texademia_backend  |     await self.original_router.handle(scope, receive, send)
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 2740, in handle
-texademia_backend  |     await included_router._handle_selected(scope, receive, send)
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 1777, in _handle_selected
-texademia_backend  |     await route.handle(scope, receive, send)
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 1766, in handle
-texademia_backend  |     await self.original_router.handle(scope, receive, send)
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 2740, in handle
-texademia_backend  |     await included_router._handle_selected(scope, receive, send)
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 1786, in _handle_selected
-texademia_backend  |     await original_route.handle(scope, receive, send)
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 1265, in handle
-texademia_backend  |     await app(scope, receive, send)
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 151, in app
-texademia_backend  |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-texademia_backend  |     raise exc
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
-texademia_backend  |     await app(scope, receive, sender)
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 137, in app
-texademia_backend  |     response = await f(request)
-texademia_backend  |                ^^^^^^^^^^^^^^^^
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 691, in app
-texademia_backend  |     raw_response = await run_endpoint_function(
-texademia_backend  |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 345, in run_endpoint_function
-texademia_backend  |     return await dependant.call(**values)
-texademia_backend  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-texademia_backend  |   File "/app/src/features/texademia/routers/documents.py", line 195, in create_document
-texademia_backend  |     for name, language, content in get_template_files(doc_in.template):
-texademia_backend  |         ^^^^^^^^^^^^^^^^^^^^^^^
-texademia_backend  | ValueError: too many values to unpack (expected 3)
-texademia_backend  | INFO:     127.0.0.1:37698 - "GET / HTTP/1.1" 200 OK
+texademia_backend  |   File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 81, in serve
+texademia_backend  |     await self._serve(sockets)
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 88, in _serve
+texademia_backend  |     config.load()
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/uvicorn/config.py", line 494, in load
+texademia_backend  |     self.loaded_app = self.load_app()
+texademia_backend  |                       ^^^^^^^^^^^^^^^
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/uvicorn/config.py", line 428, in load_app
+texademia_backend  |     return import_from_string(self.app)
+texademia_backend  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 19, in import_from_string
+texademia_backend  |     module = importlib.import_module(module_str)
+texademia_backend  |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+texademia_backend  |   File "/usr/local/lib/python3.11/importlib/__init__.py", line 126, in import_module
+texademia_backend  |     return _bootstrap._gcd_import(name[level:], package, level)
+texademia_backend  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+texademia_backend  |   File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
+texademia_backend  |   File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
+texademia_backend  |   File "<frozen importlib._bootstrap>", line 1147, in _find_and_load_unlocked
+texademia_backend  |   File "<frozen importlib._bootstrap>", line 690, in _load_unlocked
+texademia_backend  |   File "<frozen importlib._bootstrap_external>", line 940, in exec_module
+texademia_backend  |   File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+texademia_backend  |   File "/app/src/main.py", line 13, in <module>
+texademia_backend  |     from src.features.texademia.router import router as texademia_router  # <-- new import
+texademia_backend  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+texademia_backend  |   File "/app/src/features/texademia/router.py", line 2, in <module>
+texademia_backend  |     from .routers import (
+texademia_backend  |   File "/app/src/features/texademia/routers/__init__.py", line 1, in <module>
+texademia_backend  |     from .profile import router as profile_router
+texademia_backend  |   File "/app/src/features/texademia/routers/profile.py", line 10, in <module>
+texademia_backend  |     from src.features.texademia.schemas.profile import ProfileCreate, ProfileRead, ProfileUpdate
+texademia_backend  |   File "/app/src/features/texademia/schemas/__init__.py", line 1, in <module>
+texademia_backend  |     from .document import (
+texademia_backend  |   File "/app/src/features/texademia/schemas/document.py", line 119, in <module>
+texademia_backend  |     class FileDiff(BaseModel):
+texademia_backend  |   File "/app/src/features/texademia/schemas/document.py", line 121, in FileDiff
+texademia_backend  |     lines: List[DiffLine]
+texademia_backend  |            ^^^^
+texademia_backend  | NameError: name 'List' is not defined
+texademia_backend  | WARNING:  WatchFiles detected changes in 'src/features/texademia/schemas/document.py'. Reloading...
+texademia_backend  | INFO:     Started server process [265]
+texademia_backend  | INFO:     Waiting for application startup.
+texademia_backend  | INFO:     Application startup complete.
+texademia_backend  | INFO:     127.0.0.1:33108 - "GET / HTTP/1.1" 200 OK
+texademia_backend  | INFO:     172.19.0.1:40822 - "OPTIONS /api/texademia/invitations HTTP/1.1" 200 OK
+texademia_backend  | INFO:     172.19.0.1:40810 - "GET /api/texademia/invitations HTTP/1.1" 401 Unauthorized
+texademia_backend  | INFO:     172.19.0.1:40810 - "POST /api/auth/jwt/refresh HTTP/1.1" 401 Unauthorized
+texademia_backend  | INFO:     172.19.0.1:40810 - "GET /api/texademia/invitations HTTP/1.1" 401 Unauthorized
+texademia_backend  | INFO:     172.19.0.1:40810 - "POST /api/auth/jwt/refresh HTTP/1.1" 401 Unauthorized

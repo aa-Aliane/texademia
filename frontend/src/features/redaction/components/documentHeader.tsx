@@ -15,6 +15,8 @@ import { AppShellHeaderPortal } from "#/shared/ui/app-shell/headerPortal";
 import { CompileButton } from "./compileButton";
 import { DocumentMenu } from "./documentMenu";
 import type { CompilePhase } from "../hooks/useCompileDocument";
+import { VersionHistoryDrawer } from "./versionHistoryDrawer";
+
 
 interface DocumentHeaderProps {
   title: string;
@@ -32,6 +34,7 @@ interface DocumentHeaderProps {
   onDuplicateClick: () => void;
   onShareClick: () => void; // NEW
   role: string;             // NEW
+  onHistoryClick: () => void;
 }
 
 export function EditableTitle({
@@ -184,9 +187,13 @@ export function DocumentHeader({
   onDuplicateClick,
   onShareClick, // NEW
   role,         // NEW
+  onHistoryClick,
 }: DocumentHeaderProps) {
   const isCompiling = compilePhase === "saving" || compilePhase === "queued" || compilePhase === "running";
   const hasCompiledBefore = compilePhase === "done" || !!pdfUrl;
+
+
+
 
   return (
     <>
@@ -213,6 +220,7 @@ export function DocumentHeader({
             pdfUrl={pdfUrl}
             onDuplicateClick={onDuplicateClick}
             onShareClick={onShareClick}
+            onHistoryClick={onHistoryClick}
             role={role}
           />
           <CompileButton
@@ -223,6 +231,7 @@ export function DocumentHeader({
           />
         </Group>
       </AppShellHeaderPortal>
+
     </>
   );
 }
