@@ -7,6 +7,7 @@ import {
   IconFileZip,
   IconTrash,
   IconUsers,
+  IconHistory
 } from "@tabler/icons-react";
 
 interface DocumentMenuProps {
@@ -15,6 +16,7 @@ interface DocumentMenuProps {
   onDuplicateClick: () => void;
   onShareClick: () => void;
   role: string; // "owner" | "writer" | "reader"
+  onHistoryClick: () => void;
 }
 
 const TEMPLATE_LABELS: Record<string, string> = {
@@ -24,7 +26,7 @@ const TEMPLATE_LABELS: Record<string, string> = {
   acl: "ACL",
 };
 
-export function DocumentMenu({ template, pdfUrl, onDuplicateClick, onShareClick, role }: DocumentMenuProps) {
+export function DocumentMenu({ template, pdfUrl, onDuplicateClick, onShareClick, role, onHistoryClick }: DocumentMenuProps) {
   return (
     <Menu position="bottom-end" shadow="md" width={240}>
       <Menu.Target>
@@ -64,6 +66,10 @@ export function DocumentMenu({ template, pdfUrl, onDuplicateClick, onShareClick,
 
         <Menu.Item leftSection={<IconCopy size={16} />} onClick={onDuplicateClick}>
           Duplicate
+        </Menu.Item>
+
+        <Menu.Item leftSection={<IconHistory size={16} />} onClick={onHistoryClick}>
+          Document history
         </Menu.Item>
 
         <Menu.Divider />
