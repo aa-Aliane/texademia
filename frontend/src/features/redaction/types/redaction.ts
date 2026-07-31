@@ -61,3 +61,12 @@ export interface Invitation {
   role: CollaboratorRole;
   invitedByEmail: string;
 }
+
+export type VersionTrigger = "compile" | "idle" | "restore";
+
+export interface FileVersion {
+  id: string;
+  createdAt: string;
+  trigger: VersionTrigger;
+  author: string;
+}
