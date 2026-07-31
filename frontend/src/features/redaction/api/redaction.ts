@@ -231,3 +231,36 @@ export async function acceptInvitation(invitationId: string): Promise<void> {
 export async function declineInvitation(invitationId: string): Promise<void> {
   await api.post(`/api/texademia/invitations/${invitationId}/decline`);
 }
+
+
+interface FileVersionDto {
+  id: string;
+  created_at: string;
+  trigger: VersionTrigger;
+  author: string;
+}
+
+function mapFileVersion(data: FileVersionDto): FileVersion {
+  return { id: data.id, createdAt: data.created_at, trigger: data.trigger, author: data.author };
+}
+
+export async function getFileVersions(documentId: string, fileId: string): Promise<FileVersion[]> {
+  const data = await api.get<FileVersionDto[]>(
+    `/api/texademia/documents/${documentId}/files/${fileId}/versions`
+  );
+  return data.map(mapFileVersion);
+}
+
+export async function restoreFileVersion(
+  documentId: string,
+  fileId: string,
+  versionId: string
+): Promise<FileDto> {
+  return api.post<FileDto>(
+    `/api/texademia/documents/${documentId}/files/${fileId}/versions/${versionId}/restore`
+  );
+}
+
+export async function checkpointFile(documentId: string, fileId: string): Promise<void> {
+  await api.post(`/api/texademia/documents/${documentId}/files/${fileId}/checkpoint`);
+}
