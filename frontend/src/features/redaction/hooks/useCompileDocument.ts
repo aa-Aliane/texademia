@@ -50,26 +50,27 @@ export function useCompileDocument(
     queryFn: () => pollCompileStatus(jobId!),
     enabled: !!jobId,
     refetchInterval: (query) => {
-      const data = query.state.data;
-
-      // Handle side-effects cleanly inside the query callback when the job finishes
-      if (data?.status === "done" && jobId) {
-        setActiveTab(documentId, PREVIEW_TAB_ID);
-        useRedactionStore.getState().clearDirty(documentId);
-        setJobId(null);
-        return false;
+    const data = query.state.data;
+    // Handle side-effects cleanly inside the query callback when the job finishes
+    if (data?.status === "done" && jobId) {
+      setActiveTab(documentId, PREVIEW_TAB_ID);
+      useRedactionStore.getState().clearDirty(documentId);
+      setJobId(null);
+      // The document object (pdf_url, updated_at, etc.) is now stale —
+      // the compile actually finished, unlike the invalidation at job
+      // start which fired before the PDF existed.
+      queryClient.invalidateQueries({ queryKey: ["document", documentId] });
+      return false;
+    }
+    if (data?.status === "error" && jobId) {
+      if (data.log) {
+        setActiveTab(documentId, LOG_TAB_ID);
       }
-
-      if (data?.status === "error" && jobId) {
-        if (data.log) {
-          setActiveTab(documentId, LOG_TAB_ID);
-        }
-        setJobId(null);
-        return false;
-      }
-
-      return 800;
-    },
+      setJobId(null);
+      return false;
+    }
+    return 800;
+  },
   });
 
   const getPhase = (): CompilePhase => {

@@ -52,13 +52,6 @@ export function Editor({
     [onCursorMove]
   );
 
-  // THE FIX: this used to be an inline array literal rebuilt every render,
-  // which made @uiw/react-codemirror treat every render as "extensions
-  // changed" and fully reconfigure the EditorState — wiping StateFields
-  // like remoteCursorsField and lineAuthorsField back to their initial
-  // value. Memoizing it means the editor only actually reconfigures when
-  // language or the cursor listener genuinely changes, not on every
-  // document refetch / unrelated parent re-render.
   const extensions: Extension[] = useMemo(
     () => [stexLanguage, blameExtension, cursorExtension, cursorReporter],
     [cursorReporter]

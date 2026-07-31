@@ -43,20 +43,19 @@ def create_document_checkpoint(
     if not pending:
         return None
 
-    commit = DocumentVersion(
-        document_id=document.id, trigger=trigger, author=author, created_at=now
-    )
+    commit = DocumentVersion(trigger=trigger, author=author, created_at=now)
+    commit.document = document  # keeps document.versions in sync in-memory
     session.add(commit)
 
     for f, reverse_patch in pending:
         version = DocumentFileVersion(
-            file_id=f.id,
-            commit_id=commit.id,  # id is client-generated (uuid4 default_factory), safe pre-flush
             trigger=trigger,
             author=author,
             reverse_patch=reverse_patch,
             created_at=now,
         )
+        version.file = f  # keeps f.versions in sync in-memory
+        version.commit = commit  # keeps commit.file_versions in sync in-memory
         f.last_checkpoint_content = f.content
         session.add(version)
         session.add(f)
@@ -64,29 +63,14 @@ def create_document_checkpoint(
     return commit
 
 
-def reconstruct_document_at(
-    document: Document, target_commit_id: uuid.UUID
+def _reconstruct_undoing(
+    document: Document, commit_ids_to_undo: set[uuid.UUID]
 ) -> dict[uuid.UUID, str]:
-    """
-    Returns {file_id: content} reconstructing every file's content as it was
-    right after `target_commit_id` was made — i.e. undoing every commit
-    strictly newer than the target, per file, using each file's own
-    reverse-patch chain.
-    """
-    commits_desc = sorted(document.versions, key=lambda c: c.created_at, reverse=True)
-    target_index = next(
-        (i for i, c in enumerate(commits_desc) if c.id == target_commit_id), None
-    )
-    if target_index is None:
-        raise ValueError("Commit not found for this document")
-
-    newer_commit_ids = {c.id for c in commits_desc[:target_index]}
-
     result: dict[uuid.UUID, str] = {}
     for f in document.files:
         content = f.content
         file_versions = sorted(
-            [v for v in f.versions if v.commit_id in newer_commit_ids],
+            [v for v in f.versions if v.commit_id in commit_ids_to_undo],
             key=lambda v: v.created_at,
             reverse=True,
         )
@@ -98,33 +82,58 @@ def reconstruct_document_at(
                     f"Patch failed to apply cleanly for version {v.id} (file {f.id})"
                 )
         result[f.id] = content
-
     return result
+
+
+def _target_index(document: Document, target_commit_id: uuid.UUID) -> tuple[list, int]:
+    commits_desc = sorted(document.versions, key=lambda c: c.created_at, reverse=True)
+    idx = next(
+        (i for i, c in enumerate(commits_desc) if c.id == target_commit_id), None
+    )
+    if idx is None:
+        raise ValueError("Commit not found for this document")
+    return commits_desc, idx
+
+
+def reconstruct_document_after(
+    document: Document, target_commit_id: uuid.UUID
+) -> dict[uuid.UUID, str]:
+    """Content as it was right AFTER target_commit_id was made (undoes only
+    commits strictly newer than target). Used to compute a single commit's
+    own diff/summary — never for restore."""
+    commits_desc, idx = _target_index(document, target_commit_id)
+    newer_ids = {c.id for c in commits_desc[:idx]}
+    return _reconstruct_undoing(document, newer_ids)
+
+
+def reconstruct_document_before(
+    document: Document, target_commit_id: uuid.UUID
+) -> dict[uuid.UUID, str]:
+    """Content as it was right BEFORE target_commit_id's changes were applied
+    (undoes target_commit_id itself plus everything newer). This is what
+    'restore this version' should give you: the state before that change."""
+    commits_desc, idx = _target_index(document, target_commit_id)
+    ids_to_undo = {c.id for c in commits_desc[: idx + 1]}
+    return _reconstruct_undoing(document, ids_to_undo)
 
 
 async def delete_versions_after(
     document: Document, target_commit_id: uuid.UUID, session: AsyncSession
 ) -> None:
     """
-    Deletes every commit strictly newer than target_commit_id, truncating
-    history so the target becomes the new tip. DocumentFileVersion rows
-    cascade-delete automatically via the DocumentVersion relationship.
+    Deletes target_commit_id and every commit newer than it — since restoring
+    rolls back to the state BEFORE target_commit_id's change, that change
+    (and anything after it) no longer has a meaningful place in history.
     """
-    commits_desc = sorted(document.versions, key=lambda c: c.created_at, reverse=True)
-    target_index = next(
-        (i for i, c in enumerate(commits_desc) if c.id == target_commit_id), None
-    )
-    if target_index is None:
-        raise ValueError("Commit not found for this document")
-
-    for commit in commits_desc[:target_index]:
+    commits_desc, idx = _target_index(document, target_commit_id)
+    for commit in commits_desc[: idx + 1]:
         await session.delete(commit)
 
 
 def compute_commit_summary(document: Document, commit: DocumentVersion) -> str:
     """A short '+N -M in K files' string, computed by diffing each file's
     pre/post content for this specific commit."""
-    after_by_file = reconstruct_document_at(document, commit.id)
+    after_by_file = reconstruct_document_after(document, commit.id)
     total_add = 0
     total_remove = 0
 
@@ -153,7 +162,7 @@ def get_commit_diff(document: Document, commit_id: uuid.UUID) -> list[dict]:
     if not commit:
         raise ValueError("Commit not found for this document")
 
-    after_by_file = reconstruct_document_at(document, commit_id)
+    after_by_file = reconstruct_document_after(document, commit_id)
     file_names = {f.id: f.name for f in document.files}
 
     diffs = []

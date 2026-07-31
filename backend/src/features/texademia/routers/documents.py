@@ -13,6 +13,8 @@ from datetime import datetime
 from src.database.session import get_db
 from src.features.auth.models import User
 from src.features.auth.router import current_active_user
+from pathlib import Path
+
 from src.features.texademia.models.document import (
     Document,
     DocumentFile,
@@ -21,6 +23,7 @@ from src.features.texademia.models.document import (
     CollaboratorRole,
     DocumentFileVersion,
     VersionTrigger,
+    _COMPILED_PDF_DIR,
 )
 from src.features.texademia.schemas.document import (
     DocumentCreate,
@@ -44,7 +47,7 @@ from src.features.texademia.services.template_migrator import (
 
 from src.features.texademia.services.versioning import (
     create_document_checkpoint,
-    reconstruct_document_at,
+    reconstruct_document_before,
     delete_versions_after,
     compute_commit_summary,
     get_commit_diff,
@@ -487,7 +490,9 @@ async def restore_document_version(
     if not any(c.id == version_id for c in document.versions):
         raise HTTPException(status_code=404, detail="Version not found")
 
-    restored = reconstruct_document_at(document, version_id)
+    create_document_checkpoint(session, document, VersionTrigger.idle, user.email)
+
+    restored = reconstruct_document_before(document, version_id)
 
     for f in document.files:
         new_content = restored[f.id]
@@ -500,6 +505,9 @@ async def restore_document_version(
         session.add(f)
 
     await delete_versions_after(document, version_id, session)
+
+    stale_pdf = _COMPILED_PDF_DIR / f"{document.id}.pdf"
+    stale_pdf.unlink(missing_ok=True)
 
     await session.commit()
     await session.refresh(document, attribute_names=["files", "collaborators"])
