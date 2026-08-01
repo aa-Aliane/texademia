@@ -5,16 +5,18 @@ import { EditorView, type Extension } from "@codemirror/view";
 import { useEffect, useMemo, useRef } from "react";
 import { blameExtension, setLineAuthors } from "./blameExtension";
 import { cursorExtension, setRemoteCursors, type RemoteCursor } from "./cursorExtension";
+import { richTextExtension } from "./richTextMode";
 import type { LineAuthor } from "../types/redaction";
 
 interface EditorProps {
   value: string;
-  language: "latex" | "bibtex" | "log";
+  language?: "latex" | "bibtex" | "log";
   onChange: (value: string) => void;
   lineAuthors?: LineAuthor[];
   remoteCursors?: RemoteCursor[];
   onCursorMove?: (pos: number) => void;
   readOnly?: boolean;
+  richMode?: boolean;
 }
 
 // Module-level, not per-render — StreamLanguage.define(...) only needs to
@@ -29,6 +31,7 @@ export function Editor({
   remoteCursors,
   onCursorMove,
   readOnly,
+  richMode,
 }: EditorProps) {
   const editorRef = useRef<ReactCodeMirrorRef>(null);
 
@@ -52,10 +55,13 @@ export function Editor({
     [onCursorMove]
   );
 
-  const extensions: Extension[] = useMemo(
-    () => [stexLanguage, blameExtension, cursorExtension, cursorReporter],
-    [cursorReporter]
-  );
+  const extensions: Extension[] = useMemo(() => {
+    const base = [stexLanguage, blameExtension, cursorExtension, cursorReporter];
+    if (language === "latex" && richMode) {
+      return [...base, richTextExtension];
+    }
+    return base;
+  }, [cursorReporter, language, richMode]);
 
   return (
     <CodeMirror

@@ -1,4 +1,6 @@
-import { useCallback,  useRef } from "react";
+import { useCallback, useRef, useState } from "react";
+import { Button } from "@mantine/core";
+import { IconEye, IconCode } from "@tabler/icons-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Editor } from "./editor";
@@ -24,6 +26,7 @@ const CURSOR_THROTTLE_MS = 80;
 export function RedactionPage({ documentId }: RedactionPageProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [richMode, setRichMode] = useState(false);
 
   // Query Backend State
   const { data: document } = useQuery(documentQueryOptions(documentId));
@@ -174,6 +177,29 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
         presenceByFile={presenceByFile}
       />
 
+      {currentTabId !== PREVIEW_TAB_ID && currentTabId !== LOG_TAB_ID && activeFile?.language === "latex" && (
+        <div style={{ display: "flex", justifyContent: "flex-end", padding: "4px 12px" }}>
+          <Button.Group>
+            <Button
+              variant={!richMode ? "filled" : "default"}
+              size="compact-xs"
+              leftSection={<IconCode size={13} />}
+              onClick={() => setRichMode(false)}
+            >
+              Source
+            </Button>
+            <Button
+              variant={richMode ? "filled" : "default"}
+              size="compact-xs"
+              leftSection={<IconEye size={13} />}
+              onClick={() => setRichMode(true)}
+            >
+              Rich
+            </Button>
+          </Button.Group>
+        </div>
+      )}
+
       <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
         {currentTabId === PREVIEW_TAB_ID ? (
           <PdfPreview pdfUrl={pdfUrl} />
@@ -187,6 +213,7 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
             lineAuthors={activeFile.lineAuthors}
             remoteCursors={remoteCursorsByFile[currentTabId]}
             onCursorMove={handleCursorMove}
+            richMode={richMode}
           />
         ) : null}
       </div>
