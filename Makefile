@@ -1,4 +1,4 @@
-.PHONY: all features routes backend frontend purge_db fetch
+.PHONY: all features routes backend frontend purge_db fetch prod-migration
 
 all: features routes backend
 
@@ -57,6 +57,27 @@ fetch:
 		-H "Cookie: auth_token=$(ACCESS)" \
 		| python3 -m json.tool 2>&1 | tee "logs/fetch.log"
 
-prod-backup:
-	docker compose -f docker-compose.prod.yaml exec db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -F c -f /tmp/prod_backup.dump'
-	docker compose -f docker-compose.prod.yaml cp db:/tmp/prod_backup.dump ./prod_backup_$(date +%Y%m%d).dump
+prod-migration:
+  # 1. sanity check — confirms the real values without exposing them to you or me
+  docker compose -f docker-compose.prod.yaml exec db sh -c 'echo "user=$POSTGRES_USER db=$POSTGRES_DB"'
+
+  # 2. backup
+  docker compose -f docker-compose.prod.yaml exec db sh -c \
+    'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -F c -f /tmp/prod_backup.dump'
+
+  docker compose -f docker-compose.prod.yaml cp db:/tmp/prod_backup.dump ./prod_backup_$(date +%Y%m%d).dump
+
+  # 3. copy the migration script in
+  docker compose -f docker-compose.prod.yaml cp migration_001_versioning.sql db:/tmp/migration_001_versioning.sql
+
+  # 4. run it
+  docker compose -f docker-compose.prod.yaml exec db sh -c \
+    'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /tmp/migration_001_versioning.sql'
+
+  # 5. verify
+  docker compose -f docker-compose.prod.yaml exec db sh -c \
+    'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\d document_files"'
+  docker compose -f docker-compose.prod.yaml exec db sh -c \
+    'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\d document_versions"'
+  docker compose -f docker-compose.prod.yaml exec db sh -c \
+    'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\d document_file_versions"'
