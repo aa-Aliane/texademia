@@ -56,3 +56,7 @@ fetch:
 	curl -s "http://localhost:8000/api/texademia/documents/021167dc-a6c8-43b4-abef-b4761befd8e3" \
 		-H "Cookie: auth_token=$(ACCESS)" \
 		| python3 -m json.tool 2>&1 | tee "logs/fetch.log"
+
+prod-backup:
+	docker compose -f docker-compose.prod.yaml exec db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -F c -f /tmp/prod_backup.dump'
+	docker compose -f docker-compose.prod.yaml cp db:/tmp/prod_backup.dump ./prod_backup_$(date +%Y%m%d).dump

@@ -163,6 +163,7 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
         onShareClick={() => setDialog(documentId, "collaborators", true)}
         onHistoryClick={() => setDialog(documentId, "history", true)}
         role={document.role}
+        historyOpened={!!dialogState?.history}
       />
 
       <FileTabs

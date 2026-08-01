@@ -1,50 +1,50 @@
-texademia_backend  |   File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 81, in serve
-texademia_backend  |     await self._serve(sockets)
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 88, in _serve
-texademia_backend  |     config.load()
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/uvicorn/config.py", line 494, in load
-texademia_backend  |     self.loaded_app = self.load_app()
-texademia_backend  |                       ^^^^^^^^^^^^^^^
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/uvicorn/config.py", line 428, in load_app
-texademia_backend  |     return import_from_string(self.app)
-texademia_backend  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 19, in import_from_string
-texademia_backend  |     module = importlib.import_module(module_str)
-texademia_backend  |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-texademia_backend  |   File "/usr/local/lib/python3.11/importlib/__init__.py", line 126, in import_module
-texademia_backend  |     return _bootstrap._gcd_import(name[level:], package, level)
-texademia_backend  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-texademia_backend  |   File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-texademia_backend  |   File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-texademia_backend  |   File "<frozen importlib._bootstrap>", line 1147, in _find_and_load_unlocked
-texademia_backend  |   File "<frozen importlib._bootstrap>", line 690, in _load_unlocked
-texademia_backend  |   File "<frozen importlib._bootstrap_external>", line 940, in exec_module
-texademia_backend  |   File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-texademia_backend  |   File "/app/src/main.py", line 13, in <module>
-texademia_backend  |     from src.features.texademia.router import router as texademia_router  # <-- new import
-texademia_backend  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-texademia_backend  |   File "/app/src/features/texademia/router.py", line 2, in <module>
-texademia_backend  |     from .routers import (
-texademia_backend  |   File "/app/src/features/texademia/routers/__init__.py", line 1, in <module>
-texademia_backend  |     from .profile import router as profile_router
-texademia_backend  |   File "/app/src/features/texademia/routers/profile.py", line 10, in <module>
-texademia_backend  |     from src.features.texademia.schemas.profile import ProfileCreate, ProfileRead, ProfileUpdate
-texademia_backend  |   File "/app/src/features/texademia/schemas/__init__.py", line 1, in <module>
-texademia_backend  |     from .document import (
-texademia_backend  |   File "/app/src/features/texademia/schemas/document.py", line 119, in <module>
-texademia_backend  |     class FileDiff(BaseModel):
-texademia_backend  |   File "/app/src/features/texademia/schemas/document.py", line 121, in FileDiff
-texademia_backend  |     lines: List[DiffLine]
-texademia_backend  |            ^^^^
-texademia_backend  | NameError: name 'List' is not defined
-texademia_backend  | WARNING:  WatchFiles detected changes in 'src/features/texademia/schemas/document.py'. Reloading...
-texademia_backend  | INFO:     Started server process [265]
-texademia_backend  | INFO:     Waiting for application startup.
-texademia_backend  | INFO:     Application startup complete.
-texademia_backend  | INFO:     127.0.0.1:33108 - "GET / HTTP/1.1" 200 OK
-texademia_backend  | INFO:     172.19.0.1:40822 - "OPTIONS /api/texademia/invitations HTTP/1.1" 200 OK
-texademia_backend  | INFO:     172.19.0.1:40810 - "GET /api/texademia/invitations HTTP/1.1" 401 Unauthorized
-texademia_backend  | INFO:     172.19.0.1:40810 - "POST /api/auth/jwt/refresh HTTP/1.1" 401 Unauthorized
-texademia_backend  | INFO:     172.19.0.1:40810 - "GET /api/texademia/invitations HTTP/1.1" 401 Unauthorized
-texademia_backend  | INFO:     172.19.0.1:40810 - "POST /api/auth/jwt/refresh HTTP/1.1" 401 Unauthorized
+texademia_backend  |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/sqlmodel/ext/asyncio/session.py", line 155, in execute
+texademia_backend  |     return await super().execute(
+texademia_backend  |            ^^^^^^^^^^^^^^^^^^^^^^
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/sqlalchemy/ext/asyncio/session.py", line 448, in execute
+texademia_backend  |     result = await greenlet_spawn(
+texademia_backend  |              ^^^^^^^^^^^^^^^^^^^^^
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 201, in greenlet_spawn
+texademia_backend  |     result = context.throw(*sys.exc_info())
+texademia_backend  |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/sqlmodel/orm/session.py", line 136, in execute
+texademia_backend  |     return super().execute(
+texademia_backend  |            ^^^^^^^^^^^^^^^^
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/sqlalchemy/orm/session.py", line 2373, in execute
+texademia_backend  |     return self._execute_internal(
+texademia_backend  |            ^^^^^^^^^^^^^^^^^^^^^^^
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/sqlalchemy/orm/session.py", line 2261, in _execute_internal
+texademia_backend  |     conn = self._connection_for_bind(bind)
+texademia_backend  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/sqlalchemy/orm/session.py", line 2113, in _connection_for_bind
+texademia_backend  |     return trans._connection_for_bind(engine, execution_options)
+texademia_backend  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+texademia_backend  |   File "<string>", line 2, in _connection_for_bind
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/sqlalchemy/orm/state_changes.py", line 137, in _go
+texademia_backend  |     ret_value = fn(self, *arg, **kw)
+texademia_backend  |                 ^^^^^^^^^^^^^^^^^^^^
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/sqlalchemy/orm/session.py", line 1191, in _connection_for_bind
+texademia_backend  |     conn = bind.connect()
+texademia_backend  |            ^^^^^^^^^^^^^^
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 3295, in connect
+texademia_backend  |     return self._connection_cls(self)
+texademia_backend  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 144, in __init__
+texademia_backend  |     self._dbapi_connection = engine.raw_connection()
+texademia_backend  |                              ^^^^^^^^^^^^^^^^^^^^^^^
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 3319, in raw_connection
+texademia_backend  |     return self.pool.connect()
+texademia_backend  |            ^^^^^^^^^^^^^^^^^^^
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/sqlalchemy/pool/base.py", line 448, in connect
+texademia_backend  |     return _ConnectionFairy._checkout(self)
+texademia_backend  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/sqlalchemy/pool/base.py", line 1272, in _checkout
+texademia_backend  |     fairy = _ConnectionRecord.checkout(pool)
+texademia_backend  |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/sqlalchemy/pool/base.py", line 712, in checkout
+texademia_backend  |     rec = pool._do_get()
+texademia_backend  |           ^^^^^^^^^^^^^^
+texademia_backend  |   File "/usr/local/lib/python3.11/site-packages/sqlalchemy/pool/impl.py", line 167, in _do_get
+texademia_backend  |     raise exc.TimeoutError(
+texademia_backend  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)

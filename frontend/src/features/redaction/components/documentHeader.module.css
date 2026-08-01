@@ -1,0 +1,17 @@
+.historyButton {
+  color: var(--color-accent);
+}
+
+.historyButton:hover {
+  background-color: color-mix(in srgb, var(--color-accent) 8%, transparent);
+  color: var(--color-accent-strong);
+}
+
+.historyButton[data-active="true"] {
+  color: var(--color-accent-strong);
+  background-color: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+.historyButton[data-active="true"]:hover {
+  background-color: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}

@@ -3,19 +3,20 @@ import { Link } from "@tanstack/react-router";
 import {
   Group,
   Text,
-  TextInput,
   Loader,
   ActionIcon,
   Progress,
   Stack,
   Tooltip,
 } from "@mantine/core";
-import { IconArrowLeft, IconCheck, IconX } from "@tabler/icons-react";
+import { IconArrowLeft, IconCheck, IconX, IconHistory } from "@tabler/icons-react";
 import { AppShellHeaderPortal } from "#/shared/ui/app-shell/headerPortal";
 import { CompileButton } from "./compileButton";
 import { DocumentMenu } from "./documentMenu";
 import type { CompilePhase } from "../hooks/useCompileDocument";
-import { VersionHistoryDrawer } from "./versionHistoryDrawer";
+import styles from "./documentHeader.module.css";
+import { Button } from "@mantine/core";
+
 
 
 interface DocumentHeaderProps {
@@ -32,9 +33,10 @@ interface DocumentHeaderProps {
   pdfUrl: string | null;
   dirtyCount: number;
   onDuplicateClick: () => void;
-  onShareClick: () => void; // NEW
-  role: string;             // NEW
+  onShareClick: () => void;
+  role: string;
   onHistoryClick: () => void;
+  historyOpened: boolean;
 }
 
 export function EditableTitle({
@@ -185,9 +187,10 @@ export function DocumentHeader({
   pdfUrl,
   dirtyCount,
   onDuplicateClick,
-  onShareClick, // NEW
-  role,         // NEW
+  onShareClick,
+  role,
   onHistoryClick,
+  historyOpened,
 }: DocumentHeaderProps) {
   const isCompiling = compilePhase === "saving" || compilePhase === "queued" || compilePhase === "running";
   const hasCompiledBefore = compilePhase === "done" || !!pdfUrl;
@@ -203,6 +206,17 @@ export function DocumentHeader({
             <IconArrowLeft size={16} />
           </ActionIcon>
           <EditableTitle title={title} onSave={onTitleSave} isSaving={isSavingTitle} />
+          <Button
+            onClick={onHistoryClick}
+            aria-pressed={historyOpened}
+            data-active={historyOpened}
+            variant="subtle"
+            size="compact-sm"
+            leftSection={<IconHistory size={15} stroke={2} />}
+            className={styles.historyButton}
+          >
+            Document history
+          </Button>
         </Group>
       </AppShellHeaderPortal>
 
@@ -220,7 +234,6 @@ export function DocumentHeader({
             pdfUrl={pdfUrl}
             onDuplicateClick={onDuplicateClick}
             onShareClick={onShareClick}
-            onHistoryClick={onHistoryClick}
             role={role}
           />
           <CompileButton
