@@ -1,12 +1,32 @@
 frontend/src
 ├── features
+│   ├── auth
+│   │   ├── api
+│   │   │   └── auth.ts
+│   │   ├── components
+│   │   │   ├── loginForm.tsx
+│   │   │   ├── profileForm.tsx
+│   │   │   ├── registerForm.tsx
+│   │   │   └── userMenu.tsx
+│   │   ├── guards
+│   │   │   └── requireAuth.ts
+│   │   ├── hooks
+│   │   │   └── useAuth.ts
+│   │   ├── index.ts
+│   │   ├── schemas
+│   │   │   └── auth.ts
+│   │   └── types
+│   │       └── auth.ts
 │   └── redaction
 │       ├── api
 │       │   └── redaction.ts
 │       ├── components
 │       │   ├── blameExtension.ts
+│       │   ├── collaboratorsDialog.tsx
 │       │   ├── compileButton.tsx
 │       │   ├── createDocumentDialog.tsx
+│       │   ├── cursorExtension.ts
+│       │   ├── documentHeader.module.css
 │       │   ├── documentHeader.tsx
 │       │   ├── documentMenu.tsx
 │       │   ├── documentsListPage.module.css
@@ -14,15 +34,25 @@ frontend/src
 │       │   ├── duplicateDocumentDialog.tsx
 │       │   ├── editor.tsx
 │       │   ├── fileTabs.tsx
+│       │   ├── invitationsBell.tsx
 │       │   ├── pdfPreview.tsx
-│       │   └── redactionPage.tsx
+│       │   ├── redactionPage.tsx
+│       │   ├── richTextMode.ts
+│       │   └── versionHistoryDrawer.tsx
 │       ├── hooks
+│       │   ├── useCollaborators.ts
 │       │   ├── useCompileDocument.ts
+│       │   ├── useDocumentSocket.ts
+│       │   ├── useDocumentsPresence.ts
 │       │   ├── useDocuments.ts
+│       │   ├── useIdleCheckpoint.ts
 │       │   └── useUpdateDocumentTitle.ts
 │       ├── index.ts
 │       ├── store
-│       │   └── editorStore.ts
+│       │   ├── documentsStore.ts
+│       │   ├── editorStore.ts
+│       │   ├── headerStore.ts
+│       │   └── redactionStore.ts
 │       └── types
 │           └── redaction.ts
 ├── integrations
@@ -32,13 +62,17 @@ frontend/src
 ├── router.tsx
 ├── routes
 │   ├── index.tsx
+│   ├── login.tsx
+│   ├── profile.tsx
 │   ├── redaction.$documentId.tsx
 │   ├── redaction.index.tsx
+│   ├── register.tsx
 │   └── __root.tsx
 ├── routeTree.gen.ts
 ├── shared
 │   ├── api
-│   │   └── client.ts
+│   │   ├── client.ts
+│   │   └── serverCookie.ts
 │   ├── styles
 │   │   ├── animations.module.css
 │   │   └── tokens.module.css
@@ -53,4 +87,4 @@ frontend/src
 │           └── card.tsx
 └── styles.css
 
-17 directories, 36 files
+24 directories, 63 files

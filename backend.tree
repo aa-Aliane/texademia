@@ -1,0 +1,102 @@
+backend/src
+├── config
+│   ├── __init__.py
+│   ├── __pycache__
+│   │   ├── __init__.cpython-311.pyc
+│   │   └── settings.cpython-311.pyc
+│   └── settings.py
+├── database
+│   ├── base.py
+│   ├── __init__.py
+│   ├── __pycache__
+│   │   ├── __init__.cpython-311.pyc
+│   │   └── session.cpython-311.pyc
+│   └── session.py
+├── features
+│   ├── auth
+│   │   ├── dev_user.py
+│   │   ├── __init__.py
+│   │   ├── manager.py
+│   │   ├── models.py
+│   │   ├── __pycache__
+│   │   │   ├── dev_user.cpython-311.pyc
+│   │   │   ├── __init__.cpython-311.pyc
+│   │   │   ├── manager.cpython-311.pyc
+│   │   │   ├── models.cpython-311.pyc
+│   │   │   ├── router.cpython-311.pyc
+│   │   │   └── schemas.cpython-311.pyc
+│   │   ├── router.py
+│   │   └── schemas.py
+│   ├── __init__.py
+│   ├── __pycache__
+│   │   └── __init__.cpython-311.pyc
+│   └── texademia
+│       ├── assets
+│       │   ├── acl
+│       │   │   ├── acl_natbib.bst
+│       │   │   └── acl.sty
+│       │   ├── arxiv
+│       │   │   └── arxiv.sty
+│       │   ├── default
+│       │   └── ieee
+│       ├── assets.py
+│       ├── __init__.py
+│       ├── models
+│       │   ├── document.py
+│       │   ├── __init__.py
+│       │   ├── profile.py
+│       │   └── __pycache__
+│       │       ├── document.cpython-311.pyc
+│       │       ├── __init__.cpython-311.pyc
+│       │       └── profile.cpython-311.pyc
+│       ├── __pycache__
+│       │   ├── assets.cpython-311.pyc
+│       │   ├── __init__.cpython-311.pyc
+│       │   ├── router.cpython-311.pyc
+│       │   └── templates.cpython-311.pyc
+│       ├── router.py
+│       ├── routers
+│       │   ├── collaborators.py
+│       │   ├── compile.py
+│       │   ├── documents.py
+│       │   ├── __init__.py
+│       │   ├── profile.py
+│       │   ├── __pycache__
+│       │   │   ├── collaborators.cpython-311.pyc
+│       │   │   ├── compile.cpython-311.pyc
+│       │   │   ├── documents.cpython-311.pyc
+│       │   │   ├── __init__.cpython-311.pyc
+│       │   │   ├── liveblocks.cpython-311.pyc
+│       │   │   ├── profile.cpython-311.pyc
+│       │   │   └── websocket.cpython-311.pyc
+│       │   └── websocket.py
+│       ├── schemas
+│       │   ├── document.py
+│       │   ├── __init__.py
+│       │   ├── profile.py
+│       │   └── __pycache__
+│       │       ├── document.cpython-311.pyc
+│       │       ├── __init__.cpython-311.pyc
+│       │       └── profile.cpython-311.pyc
+│       ├── services
+│       │   ├── compiler.py
+│       │   ├── compiler_worker.py
+│       │   ├── preable_merger.py
+│       │   ├── pubsub.py
+│       │   ├── __pycache__
+│       │   │   ├── compiler.cpython-311.pyc
+│       │   │   ├── compiler_worker.cpython-311.pyc
+│       │   │   ├── liveblocks_broadcast.cpython-311.pyc
+│       │   │   ├── pubsub.cpython-311.pyc
+│       │   │   ├── template_migrator.cpython-311.pyc
+│       │   │   └── versioning.cpython-311.pyc
+│       │   ├── template_migrator.py
+│       │   └── versioning.py
+│       └── templates.py
+├── __init__.py
+├── main.py
+└── __pycache__
+    ├── __init__.cpython-311.pyc
+    └── main.cpython-311.pyc
+
+24 directories, 75 files

@@ -1,6 +1,8 @@
-.PHONY: all features routes shared backend frontend purge_db fetch prod-migration
+.PHONY: all features routes shared backend frontend purge_db fetch prod-migration auth-frontend auth-backend
 
 all: features routes backend
+
+CW := codeweaver
 
 features:
 	codeweaver -input frontend/src/features -output features.md
@@ -39,3 +41,18 @@ prod-migration:
 	docker compose -f docker-compose.prod.yaml exec db sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -c "\d document_files"'
 	docker compose -f docker-compose.prod.yaml exec db sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -c "\d document_versions"'
 	docker compose -f docker-compose.prod.yaml exec db sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -c "\d document_file_versions"'
+
+
+
+
+auth-backend:
+	$(CW) -input=backend/src -output=auth-backend.md \
+		-include="features/auth/manager\.py$$,features/auth/models\.py$$,features/auth/router\.py$$,features/auth/schemas\.py$$,database/session\.py$$,database/base\.py$$,config/settings\.py$$,^main\.py$$" \
+		-ignore="__pycache__,\.pyc$$" \
+		-excluded-paths-file=auth-backend-excluded.txt
+
+auth-frontend:
+	$(CW) -input=frontend/src -output=auth-frontend.md \
+		-include="features/auth/api/auth\.ts$$,features/auth/hooks/useAuth\.ts$$,features/auth/schemas/auth\.ts$$,features/auth/types/auth\.ts$$,features/auth/components/loginForm\.tsx$$,features/auth/components/registerForm\.tsx$$,features/auth/guards/requireAuth\.ts$$,features/auth/index\.ts$$,routes/login\.tsx$$,routes/register\.tsx$$,^router\.tsx$$,shared/api/client\.ts$$" \
+		-ignore="node_modules,\.gen\.ts$$" \
+		-excluded-paths-file=auth-frontend-excluded.txt
