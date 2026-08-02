@@ -11,6 +11,14 @@ from src.features.auth.manager import (
 from src.features.auth.models import User
 from src.features.auth.schemas import UserCreate, UserRead, UserUpdate
 
+from src.features.auth.dependencies import (
+    fastapi_users,
+    current_active_user,
+    refresh_current_user,
+    _set_auth_cookie,
+    _clear_auth_cookie,
+)
+
 
 fastapi_users = FastAPIUsers[User, uuid.UUID](get_user_manager, [access_backend])
 refresh_fastapi_users = FastAPIUsers[User, uuid.UUID](

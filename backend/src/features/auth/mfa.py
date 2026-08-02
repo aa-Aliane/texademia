@@ -17,7 +17,7 @@ from src.features.auth.manager import (
     get_user_manager,
 )
 from src.features.auth.models import User
-from src.features.auth.router import _set_auth_cookie, current_active_user
+from src.features.auth.dependencies import _set_auth_cookie, current_active_user
 
 MFA_TOKEN_AUDIENCE = "mfa-pending"
 MFA_TOKEN_LIFETIME_SECONDS = 300  # 5 minutes to complete the TOTP challenge

@@ -12,3 +12,4 @@ alembic
 aiosmtplib
 pyotp
 qrcode
+pillow

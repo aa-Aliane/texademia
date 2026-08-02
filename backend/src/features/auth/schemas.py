@@ -8,6 +8,7 @@ class UserRead(schemas.BaseUser[uuid.UUID]):
     first_name: str | None = None
     last_name: str | None = None
     email: EmailStr
+    is_otp_enabled: bool = False
 
 
 class UserCreate(schemas.BaseUserCreate):
