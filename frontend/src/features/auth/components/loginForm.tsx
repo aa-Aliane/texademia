@@ -1,13 +1,16 @@
 import { TextInput, PasswordInput, Button, Stack, Alert, Title, Text, Anchor } from "@mantine/core";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useLogin } from "../hooks/useAuth";
+import { useLogin, useRequestVerifyToken } from "../hooks/useAuth";
 import { loginSchema, type LoginInput } from "../schemas/auth";
 
 export function LoginForm() {
   const navigate = useNavigate();
   const { mutate, isPending, error } = useLogin();
+  const resendMutation = useRequestVerifyToken();
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
@@ -15,14 +18,38 @@ export function LoginForm() {
   } = useForm<LoginInput>({ resolver: zodResolver(loginSchema) });
 
   const onSubmit = (values: LoginInput) => {
-    mutate(values, { onSuccess: () => navigate({ to: "/redaction" }) });
+    setUnverifiedEmail(null);
+    mutate(values, {
+      onSuccess: () => navigate({ to: "/redaction" }),
+      onError: (err) => {
+        if ((err as Error).message === "LOGIN_USER_NOT_VERIFIED") {
+          setUnverifiedEmail(values.email);
+        }
+      },
+    });
   };
 
   return (
     <form onSubmit={handleSubmit(onSubmit)}>
       <Stack maw={360} mx="auto" mt={80}>
         <Title order={2}>Sign in</Title>
-        {error && <Alert color="red">{(error as Error).message}</Alert>}
+        {unverifiedEmail ? (
+          <>
+            <Alert color="yellow">
+              Your email address isn't verified yet. Check your inbox for the verification link.
+            </Alert>
+            {resendMutation.isSuccess && <Alert color="blue">Verification email re-sent.</Alert>}
+            <Button
+              variant="light"
+              loading={resendMutation.isPending}
+              onClick={() => resendMutation.mutate(unverifiedEmail)}
+            >
+              Resend verification email
+            </Button>
+          </>
+        ) : (
+          error && <Alert color="red">{(error as Error).message}</Alert>
+        )}
         <TextInput label="Email" type="email" error={errors.email?.message} {...register("email")} />
         <PasswordInput label="Password" error={errors.password?.message} {...register("password")} />
         <Button type="submit" loading={isPending}>Sign in</Button>
