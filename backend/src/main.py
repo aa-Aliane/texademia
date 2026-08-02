@@ -1,12 +1,11 @@
-from contextlib import asynccontextmanager
 from typing import List
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles  # <-- new import
-from sqlmodel import SQLModel, select
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
-from src.database.session import engine, get_db
+from src.database.session import get_db
 from src.features.auth.models import User
 from src.features.auth.router import current_active_user
 from src.features.auth.router import router as auth_router
@@ -14,14 +13,7 @@ from src.features.texademia.router import router as texademia_router  # <-- new 
 from src.features.texademia.services.compiler import OUTPUT_DIR  # <-- new import
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
-    yield
-
-
-app = FastAPI(title="CV Maker API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="CV Maker API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,

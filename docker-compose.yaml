@@ -30,7 +30,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: texademia_backend
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+    command: sh -c "alembic upgrade head && uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload"
     volumes:
       - ./backend:/app
       - compiled_pdfs:/app/compiled_pdfs

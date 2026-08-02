@@ -8,3 +8,7 @@ fastapi-users[sqlalchemy]
 redis
 rq
 diff-match-patch
+alembic
+aiosmtplib
+pyotp
+qrcode

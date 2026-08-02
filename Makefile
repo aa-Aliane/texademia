@@ -1,4 +1,4 @@
-.PHONY: all features routes shared backend frontend purge_db fetch prod-migration auth-frontend auth-backend
+.PHONY: all features routes shared backend frontend purge_db fetch prod-migration auth-frontend auth-backend migrate makemigrations stamp
 
 all: features routes backend
 
@@ -25,6 +25,16 @@ purge_db:
 	docker compose exec -T db psql -U user -d postgres -c "DROP DATABASE IF EXISTS texademia;"
 	docker compose exec -T db psql -U user -d postgres -c "CREATE DATABASE texademia;"
 	docker compose start backend
+	docker compose exec backend alembic upgrade head
+
+migrate:
+	docker compose exec backend alembic upgrade head
+
+makemigrations:
+	docker compose exec backend alembic revision --autogenerate -m "$(MSG)"
+
+stamp:
+	docker compose exec backend alembic stamp head
 
 fetch:
 	mkdir -p logs

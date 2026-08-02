@@ -19,4 +19,5 @@ jobs:
               git pull origin main
               docker compose -f docker-compose.prod.yaml down
               docker compose --env-file .env.production -f docker-compose.prod.yaml up -d --build --remove-orphans
+              docker compose --env-file .env.production -f docker-compose.prod.yaml exec -T backend alembic upgrade head
               docker exec nginx-proxy nginx -s reload
