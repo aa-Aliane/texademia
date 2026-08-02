@@ -11,6 +11,7 @@ from src.features.auth.manager import (
 from src.features.auth.models import User
 from src.features.auth.schemas import UserCreate, UserRead, UserUpdate
 
+
 fastapi_users = FastAPIUsers[User, uuid.UUID](get_user_manager, [access_backend])
 refresh_fastapi_users = FastAPIUsers[User, uuid.UUID](
     get_user_manager, [refresh_backend]
@@ -27,6 +28,10 @@ router.include_router(
     fastapi_users.get_users_router(UserRead, UserUpdate),
     prefix="/users",
 )
+
+from src.features.auth.mfa import router as mfa_router
+
+router.include_router(mfa_router)
 
 # Protected endpoints use the short-lived access token only.
 current_active_user = fastapi_users.current_user(active=True)
@@ -79,6 +84,11 @@ async def login(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="LOGIN_USER_NOT_VERIFIED",
         )
+
+    if user.is_otp_enabled:
+        from src.features.auth.mfa import make_mfa_token
+
+        return {"mfa_required": True, "mfa_token": make_mfa_token(user)}
 
     access_strategy = access_backend.get_strategy()
     refresh_strategy = refresh_backend.get_strategy()
