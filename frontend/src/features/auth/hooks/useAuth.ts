@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
-import { currentUserQueryOptions, login, logout, register, requestVerifyToken, updateCurrentUser, verifyEmail } from "../api/auth";
+import { currentUserQueryOptions, login, logout, mfaDisable, mfaEnable, mfaSetup, register, requestVerifyToken, updateCurrentUser, verifyEmail, verifyMfaCode } from "../api/auth";
 
 
 export function useCurrentUser() {
@@ -20,12 +20,17 @@ export function useLogin() {
   const router = useRouter();
   return useMutation({
     mutationFn: ({ email, password }: { email: string; password: string }) => login(email, password),
-    onSuccess: async () => {
+    onSuccess: async (result) => {
+      if (result.mfaRequired) return;
       await queryClient.invalidateQueries({ queryKey: ["current-user"] });
       await router.invalidate();
     },
   });
 }
+
+
+
+
 
 export function useRegister() {
   return useMutation({
@@ -56,5 +61,39 @@ export function useLogout() {
       await router.invalidate();
       router.navigate({ to: "/login" });
     },
+  });
+}
+
+
+export function useVerifyMfa() {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  return useMutation({
+    mutationFn: ({ mfaToken, code }: { mfaToken: string; code: string }) =>
+      verifyMfaCode(mfaToken, code),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["current-user"] });
+      await router.invalidate();
+    },
+  });
+}
+
+export function useMfaSetup() {
+  return useMutation({ mutationFn: mfaSetup });
+}
+
+export function useMfaEnable() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (code: string) => mfaEnable(code),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["current-user"] }),
+  });
+}
+
+export function useMfaDisable() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (code: string) => mfaDisable(code),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["current-user"] }),
   });
 }
