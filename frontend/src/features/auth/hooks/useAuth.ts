@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
-import { currentUserQueryOptions, login, logout, register, updateCurrentUser } from "../api/auth";
+import { currentUserQueryOptions, login, logout, register, requestVerifyToken, updateCurrentUser, verifyEmail } from "../api/auth";
+
 
 export function useCurrentUser() {
   return useQuery(currentUserQueryOptions());
@@ -31,6 +32,19 @@ export function useRegister() {
     mutationFn: ({ email, password }: { email: string; password: string }) => register(email, password),
   });
 }
+
+export function useRequestVerifyToken() {
+  return useMutation({
+    mutationFn: (email: string) => requestVerifyToken(email),
+  });
+}
+
+export function useVerifyEmail() {
+  return useMutation({
+    mutationFn: (token: string) => verifyEmail(token),
+  });
+}
+
 
 export function useLogout() {
   const queryClient = useQueryClient();

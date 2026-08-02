@@ -20,3 +20,14 @@ export const profileSchema = z.object({
   lastName: z.string().max(100).optional().or(z.literal("")),
 });
 export type ProfileInput = z.infer<typeof profileSchema>;
+
+// email verification schemas
+export const verifyEmailSchema = z.object({
+  token: z.string().min(1, "Missing verification token"),
+});
+export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
+
+export const resendVerificationSchema = z.object({
+  email: z.string().email("Enter a valid email"),
+});
+export type ResendVerificationInput = z.infer<typeof resendVerificationSchema>;

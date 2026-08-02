@@ -79,3 +79,12 @@ export async function logout(): Promise<void> {
 export async function register(email: string, password: string): Promise<void> {
   await api.post("/api/auth/register", { email, password });
 }
+
+
+export async function requestVerifyToken(email: string): Promise<void> {
+  await api.post("/api/auth/request-verify-token", { email });
+}
+
+export async function verifyEmail(token: string): Promise<void> {
+  await api.post("/api/auth/verify", { token });
+}
