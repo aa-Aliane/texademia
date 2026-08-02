@@ -9,8 +9,16 @@ from src.database.session import get_db
 from src.features.auth.models import User
 from src.features.auth.router import current_active_user
 from src.features.auth.router import router as auth_router
-from src.features.texademia.router import router as texademia_router  # <-- new import
-from src.features.texademia.services.compiler import OUTPUT_DIR  # <-- new import
+from src.features.texademia.router import router as texademia_router
+from src.features.texademia.services.compiler import OUTPUT_DIR
+
+import os
+
+# use logging info only if env variable PROD is false
+if not os.environ.get("PROD"):
+    import logging
+
+    logging.basicConfig(level=logging.INFO)
 
 
 app = FastAPI(title="CV Maker API", version="1.0.0")
