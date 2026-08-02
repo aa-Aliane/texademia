@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { blameExtension, setLineAuthors } from "./blameExtension";
 import { cursorExtension, setRemoteCursors, type RemoteCursor } from "./cursorExtension";
 import { richTextExtension } from "./richTextMode";
+import { zedSearchExtension } from "./searchPanel";
 import type { LineAuthor } from "../types/redaction";
 
 interface EditorProps {
@@ -56,7 +57,7 @@ export function Editor({
   );
 
   const extensions: Extension[] = useMemo(() => {
-    const base = [stexLanguage, blameExtension, cursorExtension, cursorReporter];
+    const base = [stexLanguage, blameExtension, cursorExtension, cursorReporter, zedSearchExtension];
     if (language === "latex" && richMode) {
       return [...base, richTextExtension];
     }
