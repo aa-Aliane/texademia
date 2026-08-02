@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import { api } from "#/shared/api/client";
+import { ApiError, api } from "#/shared/api/client";
 import type { User } from "../types/auth";
 
 interface UserDto {
@@ -8,6 +8,7 @@ interface UserDto {
   is_active: boolean;
   is_superuser: boolean;
   is_verified: boolean;
+  is_otp_enabled?: boolean;
   first_name?: string | null;
   last_name?: string | null;
 }
@@ -19,6 +20,7 @@ function mapUser(data: UserDto): User {
     isActive: data.is_active,
     isSuperuser: data.is_superuser,
     isVerified: data.is_verified,
+    isOtpEnabled: data.is_otp_enabled ?? false,
     firstName: data.first_name ?? null,
     lastName: data.last_name ?? null,
   };
@@ -44,10 +46,10 @@ export const currentUserQueryOptions = (cookieHeader?: string | null) =>
     retry: false,
   });
 
-// fastapi-users' /jwt/login is OAuth2PasswordRequestForm: it needs
-// application/x-www-form-urlencoded with `username`/`password`, not JSON —
-// so it can't go through the shared `api` client, which always sends JSON.
-export async function login(email: string, password: string): Promise<void> {
+
+export type LoginResult = { mfaRequired: false } | { mfaRequired: true; mfaToken: string };
+
+export async function login(email: string, password: string): Promise<LoginResult> {
   const body = new URLSearchParams();
   body.set("username", email);
   body.set("password", password);
@@ -70,6 +72,13 @@ export async function login(email: string, password: string): Promise<void> {
     }
     throw new Error(detail === "LOGIN_BAD_CREDENTIALS" ? "Invalid email or password" : detail);
   }
+
+  // With MFA enabled the backend sets no cookies and returns a pre-MFA token.
+  const data = (await res.json()) as { mfa_required?: boolean; mfa_token?: string };
+  if (data.mfa_required && data.mfa_token) {
+    return { mfaRequired: true, mfaToken: data.mfa_token };
+  }
+  return { mfaRequired: false };
 }
 
 export async function logout(): Promise<void> {
@@ -87,4 +96,48 @@ export async function requestVerifyToken(email: string): Promise<void> {
 
 export async function verifyEmail(token: string): Promise<void> {
   await api.post("/api/auth/verify", { token });
+}
+
+
+export async function verifyMfaCode(mfaToken: string, code: string): Promise<void> {
+  try {
+    await api.post("/api/auth/mfa/verify", { mfa_token: mfaToken, code });
+  } catch (err) {
+    if (err instanceof ApiError && err.message === "MFA_INVALID_CODE") {
+      throw new Error("Invalid authentication code");
+    }
+    if (err instanceof ApiError && err.message === "MFA_TOKEN_INVALID") {
+      throw new Error("Sign-in session expired — please sign in again");
+    }
+    throw err;
+  }
+}
+
+interface MfaSetupDto {
+  otpauth_uri: string;
+  qr_code_base64: string;
+  secret: string;
+}
+
+export interface MfaSetup {
+  otpauthUri: string;
+  qrCodeBase64: string;
+  secret: string;
+}
+
+export async function mfaSetup(): Promise<MfaSetup> {
+  const data = await api.post<MfaSetupDto>("/api/auth/mfa/setup");
+  return {
+    otpauthUri: data.otpauth_uri,
+    qrCodeBase64: data.qr_code_base64,
+    secret: data.secret,
+  };
+}
+
+export async function mfaEnable(code: string): Promise<void> {
+  await api.post("/api/auth/mfa/enable", { code });
+}
+
+export async function mfaDisable(code: string): Promise<void> {
+  await api.post("/api/auth/mfa/disable", { code });
 }

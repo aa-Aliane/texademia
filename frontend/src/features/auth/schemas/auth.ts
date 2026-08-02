@@ -31,3 +31,9 @@ export const resendVerificationSchema = z.object({
   email: z.string().email("Enter a valid email"),
 });
 export type ResendVerificationInput = z.infer<typeof resendVerificationSchema>;
+
+
+export const mfaCodeSchema = z.object({
+  code: z.string().regex(/^\d{6}$/, "Enter the 6-digit code from your authenticator app"),
+});
+export type MfaCodeInput = z.infer<typeof mfaCodeSchema>;

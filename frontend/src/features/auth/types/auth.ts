@@ -4,6 +4,7 @@ export interface User {
   isActive: boolean;
   isSuperuser: boolean;
   isVerified: boolean;
+  isOtpEnabled: boolean;
   firstName?: string | null;
   lastName?: string | null;
 }
