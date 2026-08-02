@@ -20,6 +20,9 @@ class User(SQLModel, table=True):
     is_superuser: bool = Field(default=False, nullable=False)
     is_verified: bool = Field(default=False, nullable=False)
 
+    otp_secret: Optional[str] = Field(default=None, nullable=True)
+    is_otp_enabled: bool = Field(default=False, nullable=False)
+
     first_name: Optional[str] = Field(default=None, nullable=True)
     last_name: Optional[str] = Field(default=None, nullable=True)
 
