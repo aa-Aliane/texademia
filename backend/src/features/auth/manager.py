@@ -13,6 +13,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.config.settings import settings
 from src.database.session import get_db
 from src.features.auth.models import User
+from src.features.auth.email import send_email
 
 # 1. Import your Profile model
 from src.features.texademia.models.profile import Profile
@@ -41,6 +42,27 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         await session.commit()
 
         print(f"User {user.id} registered and blank profile created.")
+
+    async def on_after_request_verify(
+        self, user: User, token: str, request: Optional[Request] = None
+    ):
+        """Called by fastapi-users when a verification token is requested
+        (POST /auth/request-verify-token, and automatically after register
+        if the frontend calls it). Email the link to the user."""
+        verify_url = f"{settings.FRONTEND_URL}/verify-email?token={token}"
+        await send_email(
+            to=user.email,
+            subject="Verify your TexAdemia account",
+            body=(
+                f"Hi,\n\n"
+                f"Click the link below to verify your email address:\n\n"
+                f"{verify_url}\n\n"
+                f"If you did not create an account, ignore this email."
+            ),
+        )
+
+    async def on_after_verify(self, user: User, request: Optional[Request] = None):
+        print(f"User {user.id} verified their email.")
 
 
 async def get_user_manager(user_db=Depends(get_user_db)):
