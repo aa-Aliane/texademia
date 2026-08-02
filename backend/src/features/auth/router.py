@@ -74,6 +74,12 @@ async def login(
             detail="LOGIN_BAD_CREDENTIALS",
         )
 
+    if not user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="LOGIN_USER_NOT_VERIFIED",
+        )
+
     access_strategy = access_backend.get_strategy()
     refresh_strategy = refresh_backend.get_strategy()
 
