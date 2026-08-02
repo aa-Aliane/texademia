@@ -80,6 +80,13 @@ export const documentQueryOptions = (documentId: string, cookieHeader?: string |
     queryFn: () => getDocument(documentId, cookieHeader),
   });
 
+// Plain-link download (cookie is samesite=lax → sent on top-level navigation,
+// same mechanism as the PDF link). The endpoint sets Content-Disposition:
+// attachment, so the browser saves it instead of navigating.
+export function getDocumentZipUrl(documentId: string): string {
+  return toPublicUrl(`/api/texademia/documents/${documentId}/export.zip`);
+}
+
 async function saveFile(documentId: string, fileId: string, content: string): Promise<void> {
   await api.patch(`/api/texademia/documents/${documentId}/files/${fileId}`, { content });
 }

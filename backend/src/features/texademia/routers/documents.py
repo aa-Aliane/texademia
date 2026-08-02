@@ -1,10 +1,14 @@
+import io
+import re
 import uuid
+import zipfile
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
+
 
 import difflib
 from datetime import datetime
@@ -13,7 +17,7 @@ from datetime import datetime
 from src.database.session import get_db
 from src.features.auth.models import User
 from src.features.auth.router import current_active_user
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from src.features.texademia.models.document import (
     Document,
@@ -32,7 +36,6 @@ from src.features.texademia.schemas.document import (
     DocumentDuplicate,
     FileUpdate,
     FileRead,
-    CollaboratorRead,
     DocumentVersionRead,
 )
 from src.features.texademia.templates import get_template_files
@@ -266,6 +269,50 @@ async def get_document(
 ):
     document, role = await _get_accessible_document(document_id, session, user)
     return _to_document_read(document, role)
+
+
+def _safe_zip_stem(title: str) -> str:
+    """ASCII-only, filesystem-safe filename stem for the ZIP attachment."""
+    stem = re.sub(r"[^\w\-]+", "_", title).strip("_")
+    return stem or "document"
+
+
+@router.get("/{document_id}/export.zip")
+async def export_document_zip(
+    document_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    user: User = Depends(current_active_user),
+):
+    """Download all of a document's current source files as a ZIP archive.
+
+    Read-level access is enough (same as GET /documents/{id}, which already
+    returns full file contents). Version history is not included.
+    """
+    document, _role = await _get_accessible_document(document_id, session, user)
+
+    buffer = io.BytesIO()
+    used_names: set[str] = set()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in document.files:
+            # Flatten any path separators — DocumentFile.name is a bare
+            # filename today ("main.tex"), this just keeps it that way.
+            arcname = PurePosixPath(f.name).name or f"file-{f.id}"
+            # No DB uniqueness on name — disambiguate repeats.
+            if arcname in used_names:
+                stem, dot, ext = arcname.partition(".")
+                n = 1
+                while f"{stem} ({n}){dot}{ext}" in used_names:
+                    n += 1
+                arcname = f"{stem} ({n}){dot}{ext}"
+            used_names.add(arcname)
+            zf.writestr(arcname, f.content)
+
+    filename = f"{_safe_zip_stem(document.title)}.zip"
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.patch("/{document_id}", response_model=DocumentRead)
