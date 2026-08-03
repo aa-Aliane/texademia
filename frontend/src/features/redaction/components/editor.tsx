@@ -24,6 +24,20 @@ interface EditorProps {
 // run once ever, not once per keystroke.
 const stexLanguage = StreamLanguage.define(stex as StreamParser<unknown>);
 
+// Match the gutters (line numbers column) to the app theme — kills the
+// default grey strip and the visible seam at the top of the gutter.
+const gutterTheme = EditorView.theme({
+  ".cm-gutters": {
+    backgroundColor: "var(--color-surface)",
+    color: "var(--color-text-muted)",
+    borderRight: "1px solid var(--color-border)",
+  },
+  ".cm-activeLineGutter": {
+    backgroundColor: "var(--color-accent-subtle)",
+    color: "var(--color-text)",
+  },
+});
+
 export function Editor({
   value,
   language,
@@ -57,7 +71,7 @@ export function Editor({
   );
 
   const extensions: Extension[] = useMemo(() => {
-    const base = [stexLanguage, blameExtension, cursorExtension, cursorReporter, zedSearchExtension];
+    const base = [stexLanguage, gutterTheme, blameExtension, cursorExtension, cursorReporter, zedSearchExtension];
     if (language === "latex" && richMode) {
       return [...base, richTextExtension];
     }

@@ -4,6 +4,8 @@ import {
 	findPrevious,
 	getSearchQuery,
 	openSearchPanel,
+	replaceAll,
+	replaceNext,
 	SearchQuery,
 	search,
 	setSearchQuery,
@@ -17,7 +19,8 @@ import {
 } from "@codemirror/view";
 
 // Zed-style search: floating top-right panel, live highlights, match
-// counter, Enter/Shift+Enter navigation, Esc closes and refocuses editor.
+// counter, Enter/Shift+Enter navigation, regex/whole-word/case toggles,
+// replace & replace-all, Esc closes and refocuses editor.
 
 function countMatches(view: EditorView): { total: number; current: number } {
 	const query = getSearchQuery(view.state);
@@ -40,34 +43,63 @@ function countMatches(view: EditorView): { total: number; current: number } {
 	return { total, current };
 }
 
+const ACCENT = "var(--color-accent)";
+
+const BTN_BASE =
+	"background:transparent;border:none;border-radius:var(--radius-sm);" +
+	"color:var(--color-text-secondary);cursor:pointer;padding:3px 7px;" +
+	"font:inherit;line-height:1;";
+
+const INPUT_STYLE =
+	"background:var(--color-bg);border:1px solid var(--color-border);" +
+	"border-radius:var(--radius-sm);outline:none;color:var(--color-text);" +
+	"font:inherit;padding:3px 8px;";
+
 function zedSearchPanel(view: EditorView): Panel {
 	const dom = document.createElement("div");
 	dom.className = "cm-zed-search";
 	dom.style.cssText =
-		"display:flex;align-items:center;gap:4px;padding:4px 6px;" +
-		"background:#25262b;border:1px solid #373a40;border-radius:6px;" +
-		"box-shadow:0 4px 12px rgba(0,0,0,0.4);font-size:13px;";
+		"display:flex;flex-direction:column;gap:6px;padding:8px;" +
+		"background:var(--color-surface-raised);border:1px solid var(--color-border);" +
+		"border-radius:var(--radius-md);box-shadow:var(--shadow-lg);" +
+		"font-size:13px;font-family:var(--font-family);";
+
+	const row = () => {
+		const r = document.createElement("div");
+		r.style.cssText = "display:flex;align-items:center;gap:4px;";
+		return r;
+	};
+	const findRow = row();
+	const replaceRow = row();
 
 	const input = document.createElement("input");
 	input.placeholder = "Find";
 	input.setAttribute("aria-label", "Find in file");
-	input.style.cssText =
-		"background:transparent;border:none;outline:none;color:#c1c2c5;" +
-		"width:180px;font:inherit;padding:2px 4px;";
+	input.style.cssText = INPUT_STYLE + "width:200px;";
+
+	const replaceInput = document.createElement("input");
+	replaceInput.placeholder = "Replace";
+	replaceInput.setAttribute("aria-label", "Replace with");
+	replaceInput.style.cssText = INPUT_STYLE + "width:200px;";
+
+	for (const el of [input, replaceInput]) {
+		el.onfocus = () => (el.style.borderColor = ACCENT);
+		el.onblur = () => (el.style.borderColor = "var(--color-border)");
+	}
 
 	const counter = document.createElement("span");
 	counter.style.cssText =
-		"color:#909296;min-width:44px;text-align:center;font-variant-numeric:tabular-nums;user-select:none;";
+		"color:var(--color-text-muted);min-width:44px;text-align:center;" +
+		"font-variant-numeric:tabular-nums;user-select:none;";
 
 	const mkBtn = (label: string, title: string, onClick: () => void) => {
 		const btn = document.createElement("button");
 		btn.textContent = label;
 		btn.title = title;
 		btn.type = "button";
-		btn.style.cssText =
-			"background:transparent;border:none;border-radius:4px;color:#909296;" +
-			"cursor:pointer;padding:2px 6px;font:inherit;line-height:1;";
-		btn.onmouseenter = () => (btn.style.background = "#373a40");
+		btn.style.cssText = BTN_BASE;
+		btn.onmouseenter = () =>
+			(btn.style.background = "var(--color-accent-subtle)");
 		btn.onmouseleave = () =>
 			(btn.style.background =
 				btn.dataset.active === "1" ? ACCENT : "transparent");
@@ -78,9 +110,10 @@ function zedSearchPanel(view: EditorView): Panel {
 		return btn;
 	};
 
-	let caseSensitive = getSearchQuery(view.state).caseSensitive;
-
-	const ACCENT = "var(--color-accent)";
+	const initialQuery = getSearchQuery(view.state);
+	let caseSensitive = initialQuery.caseSensitive;
+	let regexp = initialQuery.regexp;
+	let wholeWord = initialQuery.wholeWord;
 
 	const updateCounter = () => {
 		const { total, current } = countMatches(view);
@@ -94,25 +127,58 @@ function zedSearchPanel(view: EditorView): Panel {
 	const applyQuery = (selectFirst: boolean) => {
 		view.dispatch({
 			effects: setSearchQuery.of(
-				new SearchQuery({ search: input.value, caseSensitive }),
+				new SearchQuery({
+					search: input.value,
+					replace: replaceInput.value,
+					caseSensitive,
+					regexp,
+					wholeWord,
+				}),
 			),
 		});
 		if (selectFirst && input.value) findNext(view);
 	};
 
-	const caseBtn = mkBtn("Aa", "Match case", () => {
-		caseSensitive = !caseSensitive;
-		caseBtn.dataset.active = caseSensitive ? "1" : "0";
-		caseBtn.style.background = caseSensitive ? ACCENT : "transparent";
-		caseBtn.style.color = caseSensitive ? "#fff" : "#909296";
-		applyQuery(true);
-		input.focus();
-	});
-	caseBtn.dataset.active = caseSensitive ? "1" : "0";
-	if (caseSensitive) {
-		caseBtn.style.background = ACCENT;
-		caseBtn.style.color = "#fff";
-	}
+	const mkToggle = (
+		label: string,
+		title: string,
+		get: () => boolean,
+		set: (v: boolean) => void,
+	) => {
+		const btn = mkBtn(label, title, () => {
+			set(!get());
+			sync();
+			applyQuery(true);
+			input.focus();
+		});
+		const sync = () => {
+			const on = get();
+			btn.dataset.active = on ? "1" : "0";
+			btn.style.background = on ? ACCENT : "transparent";
+			btn.style.color = on ? "#fff" : "var(--color-text-secondary)";
+		};
+		sync();
+		return btn;
+	};
+
+	const caseBtn = mkToggle(
+		"Aa",
+		"Match case",
+		() => caseSensitive,
+		(v) => (caseSensitive = v),
+	);
+	const regexBtn = mkToggle(
+		".*",
+		"Use regular expression",
+		() => regexp,
+		(v) => (regexp = v),
+	);
+	const wordBtn = mkToggle(
+		"W",
+		"Match whole word",
+		() => wholeWord,
+		(v) => (wholeWord = v),
+	);
 
 	const prevBtn = mkBtn("↑", "Previous match (Shift+Enter)", () => {
 		findPrevious(view);
@@ -129,16 +195,38 @@ function zedSearchPanel(view: EditorView): Panel {
 		view.focus();
 	});
 
+	const replaceBtn = mkBtn("Replace", "Replace current match", () => {
+		applyQuery(false);
+		replaceNext(view);
+		updateCounter();
+		replaceInput.focus();
+	});
+	const replaceAllBtn = mkBtn("All", "Replace all matches", () => {
+		applyQuery(false);
+		replaceAll(view);
+		updateCounter();
+		replaceInput.focus();
+	});
+
 	input.addEventListener("input", () => {
 		applyQuery(true);
 		updateCounter();
 	});
+	replaceInput.addEventListener("input", () => {
+		applyQuery(false);
+	});
 
-	input.addEventListener("keydown", (e) => {
+	const onKey = (e: KeyboardEvent, isReplace: boolean) => {
 		if (e.key === "Enter") {
 			e.preventDefault();
-			if (e.shiftKey) findPrevious(view);
-			else findNext(view);
+			if (isReplace) {
+				applyQuery(false);
+				replaceNext(view);
+			} else if (e.shiftKey) {
+				findPrevious(view);
+			} else {
+				findNext(view);
+			}
 			updateCounter();
 		} else if (e.key === "Escape") {
 			e.preventDefault();
@@ -146,15 +234,19 @@ function zedSearchPanel(view: EditorView): Panel {
 			closeSearchPanel(view);
 			view.focus();
 		}
-	});
+	};
+	input.addEventListener("keydown", (e) => onKey(e, false));
+	replaceInput.addEventListener("keydown", (e) => onKey(e, true));
 
-	dom.append(input, counter, caseBtn, prevBtn, nextBtn, closeBtn);
+	findRow.append(input, counter, caseBtn, regexBtn, wordBtn, prevBtn, nextBtn, closeBtn);
+	replaceRow.append(replaceInput, replaceBtn, replaceAllBtn);
+	dom.append(findRow, replaceRow);
 
 	// Prefill with the current selection (Zed behavior) or an open query.
-	const initialQuery = getSearchQuery(view.state);
 	const sel = view.state.selection.main;
 	if (initialQuery.valid && initialQuery.search) {
 		input.value = initialQuery.search;
+		replaceInput.value = initialQuery.replace;
 	} else if (!sel.empty) {
 		input.value = view.state.sliceDoc(sel.from, sel.to);
 	}
