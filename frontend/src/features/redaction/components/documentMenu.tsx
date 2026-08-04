@@ -13,6 +13,7 @@ import {
 interface DocumentMenuProps {
   template: string;
   pdfUrl: string | null;
+  zipUrl: string;
   onDuplicateClick: () => void;
   onShareClick: () => void;
   role: string; // "owner" | "writer" | "reader"
@@ -25,7 +26,7 @@ const TEMPLATE_LABELS: Record<string, string> = {
   acl: "ACL",
 };
 
-export function DocumentMenu({ template, pdfUrl, onDuplicateClick, onShareClick, role}: DocumentMenuProps) {
+export function DocumentMenu({ template, pdfUrl, zipUrl, onDuplicateClick, onShareClick, role}: DocumentMenuProps) {
   return (
     <Menu position="bottom-end" shadow="md" width={240}>
       <Menu.Target>
@@ -59,7 +60,13 @@ export function DocumentMenu({ template, pdfUrl, onDuplicateClick, onShareClick,
           {pdfUrl ? "Download PDF" : "Download PDF (compile first)"}
         </Menu.Item>
 
-        <Menu.Item leftSection={<IconFileZip size={16} />} disabled>
+        <Menu.Item
+          leftSection={<IconFileZip size={16} />}
+          component="a"
+          href={zipUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
           Download source (.zip)
         </Menu.Item>
 

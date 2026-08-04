@@ -31,6 +31,7 @@ interface DocumentHeaderProps {
   compileLog: string | null;
   template: string;
   pdfUrl: string | null;
+  zipUrl: string;
   dirtyCount: number;
   onDuplicateClick: () => void;
   onShareClick: () => void;
@@ -185,6 +186,7 @@ export function DocumentHeader({
   compileLog,
   template,
   pdfUrl,
+  zipUrl,
   dirtyCount,
   onDuplicateClick,
   onShareClick,
@@ -232,6 +234,7 @@ export function DocumentHeader({
           <DocumentMenu
             template={template}
             pdfUrl={pdfUrl}
+            zipUrl={zipUrl}
             onDuplicateClick={onDuplicateClick}
             onShareClick={onShareClick}
             role={role}

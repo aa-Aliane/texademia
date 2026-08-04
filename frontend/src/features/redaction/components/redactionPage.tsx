@@ -12,7 +12,7 @@ import { CollaboratorsDialog } from "./collaboratorsDialog";
 import { useCompileDocument } from "../hooks/useCompileDocument";
 import { useUpdateDocumentTitle } from "../hooks/useUpdateDocumentTitle";
 import { useDocumentSocket } from "../hooks/useDocumentSocket";
-import { documentQueryOptions, duplicateDocument } from "../api/redaction";
+import { documentQueryOptions, duplicateDocument, getDocumentZipUrl } from "../api/redaction";
 import { useRedactionStore } from "../store/redactionStore";
 import { useCurrentUser } from "#/features/auth";
 import { VersionHistoryDrawer } from "./versionHistoryDrawer";
@@ -161,6 +161,7 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
         compileLog={compileLog}
         template={document.template}
         pdfUrl={pdfUrl}
+        zipUrl={getDocumentZipUrl(documentId)}
         dirtyCount={dirtyCount}
         onDuplicateClick={() => setDialog(documentId, "duplicate", true)}
         onShareClick={() => setDialog(documentId, "collaborators", true)}
