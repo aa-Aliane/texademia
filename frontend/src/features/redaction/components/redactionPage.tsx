@@ -1,5 +1,4 @@
 import { useCallback, useRef, useState } from "react";
-import { Button } from "@mantine/core";
 import { IconEye, IconCode } from "@tabler/icons-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -180,24 +179,31 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
 
       {currentTabId !== PREVIEW_TAB_ID && currentTabId !== LOG_TAB_ID && activeFile?.language === "latex" && (
         <div style={{ display: "flex", justifyContent: "flex-end", padding: "4px 12px" }}>
-          <Button.Group>
-            <Button
-              variant={!richMode ? "filled" : "default"}
-              size="compact-xs"
-              leftSection={<IconCode size={13} />}
-              onClick={() => setRichMode(false)}
-            >
-              Source
-            </Button>
-            <Button
-              variant={richMode ? "filled" : "default"}
-              size="compact-xs"
-              leftSection={<IconEye size={13} />}
-              onClick={() => setRichMode(true)}
-            >
-              Rich
-            </Button>
-          </Button.Group>
+          <button
+            type="button"
+            title={richMode ? "Switch to source view" : "Switch to rich view"}
+            aria-label={richMode ? "Switch to source view" : "Switch to rich view"}
+            onClick={() => setRichMode(!richMode)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "6px",
+              height: "28px",
+              padding: "0 10px",
+              background: "var(--color-accent)",
+              color: "#fff",
+              border: "none",
+              borderRadius: "6px",
+              cursor: "pointer",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.35)",
+              fontSize: "12px",
+              fontWeight: 600,
+            }}
+          >
+            {richMode ? <IconCode size={14} /> : <IconEye size={14} />}
+            {richMode ? "Source" : "Rich"}
+          </button>
         </div>
       )}
 

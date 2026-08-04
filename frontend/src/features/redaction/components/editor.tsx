@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { blameExtension, setLineAuthors } from "./blameExtension";
 import { cursorExtension, setRemoteCursors, type RemoteCursor } from "./cursorExtension";
 import { richTextExtension } from "./richTextMode";
+import { zedSearchExtension } from "./searchPanel";
 import type { LineAuthor } from "../types/redaction";
 
 interface EditorProps {
@@ -22,6 +23,20 @@ interface EditorProps {
 // Module-level, not per-render — StreamLanguage.define(...) only needs to
 // run once ever, not once per keystroke.
 const stexLanguage = StreamLanguage.define(stex as StreamParser<unknown>);
+
+// Match the gutters (line numbers column) to the app theme — kills the
+// default grey strip and the visible seam at the top of the gutter.
+const gutterTheme = EditorView.theme({
+  ".cm-gutters": {
+    backgroundColor: "var(--color-surface)",
+    color: "var(--color-text-muted)",
+    borderRight: "1px solid var(--color-border)",
+  },
+  ".cm-activeLineGutter": {
+    backgroundColor: "var(--color-accent-subtle)",
+    color: "var(--color-text)",
+  },
+});
 
 export function Editor({
   value,
@@ -56,7 +71,7 @@ export function Editor({
   );
 
   const extensions: Extension[] = useMemo(() => {
-    const base = [stexLanguage, blameExtension, cursorExtension, cursorReporter];
+    const base = [stexLanguage, gutterTheme, blameExtension, cursorExtension, cursorReporter, zedSearchExtension];
     if (language === "latex" && richMode) {
       return [...base, richTextExtension];
     }
