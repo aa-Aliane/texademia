@@ -3,9 +3,8 @@ services:
     image: postgres:16-alpine
     container_name: texademia_db
     restart: unless-stopped
-    environment:
-      env_file:
-        - ./backend/.env.production
+    env_file:
+      - ./backend/.env.production
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
