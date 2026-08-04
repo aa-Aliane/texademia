@@ -30,6 +30,7 @@ from src.features.texademia.models.document import (
     _COMPILED_PDF_DIR,
 )
 from src.features.texademia.schemas.document import (
+    CollaboratorRead,
     DocumentCreate,
     DocumentRead,
     DocumentUpdate,
