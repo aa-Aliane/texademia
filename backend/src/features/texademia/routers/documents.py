@@ -17,6 +17,7 @@ from datetime import datetime
 from src.database.session import get_db
 from src.features.auth.models import User
 from src.features.auth.router import current_active_user
+from src.features.texademia.assets import get_template_asset_files
 from pathlib import Path, PurePosixPath
 
 from src.features.texademia.models.document import (
@@ -293,20 +294,28 @@ async def export_document_zip(
 
     buffer = io.BytesIO()
     used_names: set[str] = set()
+
+    def unique_arcname(name: str) -> str:
+        arcname = PurePosixPath(name).name or "file"
+        if arcname in used_names:
+            stem, dot, ext = arcname.partition(".")
+            n = 1
+            while f"{stem} ({n}){dot}{ext}" in used_names:
+                n += 1
+            arcname = f"{stem} ({n}){dot}{ext}"
+        used_names.add(arcname)
+        return arcname
+
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         for f in document.files:
             # Flatten any path separators — DocumentFile.name is a bare
             # filename today ("main.tex"), this just keeps it that way.
-            arcname = PurePosixPath(f.name).name or f"file-{f.id}"
             # No DB uniqueness on name — disambiguate repeats.
-            if arcname in used_names:
-                stem, dot, ext = arcname.partition(".")
-                n = 1
-                while f"{stem} ({n}){dot}{ext}" in used_names:
-                    n += 1
-                arcname = f"{stem} ({n}){dot}{ext}"
-            used_names.add(arcname)
-            zf.writestr(arcname, f.content)
+            zf.writestr(unique_arcname(f.name or f"file-{f.id}"), f.content)
+
+        # Ship the template's assets (.sty/.cls/.bst) so the ZIP compiles standalone.
+        for asset in get_template_asset_files(document.template):
+            zf.write(asset, unique_arcname(asset.name))
 
     filename = f"{_safe_zip_stem(document.title)}.zip"
     return Response(
