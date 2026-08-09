@@ -1,5 +1,6 @@
 # src/features/texademia/services/compiler_worker.py
 import os
+import re
 import resource
 import shutil
 import subprocess
@@ -20,6 +21,46 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 
 COMPILE_TIMEOUT_SECONDS = 60  # per pdflatex/bibtex invocation
 MEMORY_LIMIT_BYTES = 768 * 1024 * 1024  # bumped a bit — 512MB was tight for real docs
+
+SUPPORTED_ENGINES = {"pdflatex", "xelatex", "lualatex"}
+
+# Packages/commands that only work under XeTeX or LuaTeX. If a doc uses these
+# without an explicit magic comment, we auto-switch to xelatex rather than
+# let it fail with a cryptic fontspec/unicode error.
+_XETEX_SIGNAL_PATTERNS = [
+    re.compile(r"\\usepackage(\[[^\]]*\])?\{fontspec\}"),
+    re.compile(r"\\usepackage(\[[^\]]*\])?\{polyglossia\}"),
+    re.compile(r"\\setmainfont"),
+    re.compile(r"\\setmonofont"),
+    re.compile(r"\\newfontfamily"),
+]
+
+_MAGIC_COMMENT_RE = re.compile(r"%\s*!TeX program\s*=\s*(\w+)", re.IGNORECASE)
+
+
+def detect_engine(source: str, default: str = "pdflatex") -> str:
+    """
+    Decide which TeX engine to use for a given .tex source.
+
+    1. Explicit magic comment (e.g. '% !TeX program = xelatex') wins, if present
+       anywhere near the top of the file — this is the standard convention used
+       by Overleaf/TeXstudio/etc.
+    2. Otherwise, heuristically detect XeTeX/LuaTeX-only packages (fontspec,
+       polyglossia, ...) and auto-switch to xelatex.
+    3. Otherwise, fall back to `default` (pdflatex), preserving existing
+       behavior for the vast majority of documents.
+    """
+    head = "\n".join(source.splitlines()[:20])
+    match = _MAGIC_COMMENT_RE.search(head)
+    if match:
+        engine = match.group(1).lower()
+        if engine in SUPPORTED_ENGINES:
+            return engine
+
+    if any(pattern.search(source) for pattern in _XETEX_SIGNAL_PATTERNS):
+        return "xelatex"
+
+    return default
 
 
 class CompileError(Exception):
@@ -94,12 +135,14 @@ def compile_latex_job(document_id: str, files_data: list[dict], template: str) -
 
     update_progress("preparing", 10, "Setting up compilation environment")
 
-    if not shutil.which("pdflatex"):
-        fail("pdflatex is not installed.")
-
     main_file = next((f for f in files_data if f["name"].endswith(".tex")), None)
     if main_file is None:
         fail("No .tex file found.")
+
+    engine = detect_engine(main_file["content"])
+
+    if not shutil.which(engine):
+        fail(f"{engine} is not installed.")
 
     main_stem = Path(main_file["name"]).stem
     has_bib = any(f["name"].endswith(".bib") for f in files_data)
@@ -117,17 +160,17 @@ def compile_latex_job(document_id: str, files_data: list[dict], template: str) -
         for f in files_data:
             (tmp_path / f["name"]).write_text(f["content"], encoding="utf-8")
 
-        pdflatex_cmd = [
-            "pdflatex",
+        engine_cmd = [
+            engine,
             "-interaction=nonstopmode",
             "-halt-on-error",
             "-no-shell-escape",
             main_file["name"],
         ]
 
-        update_progress("compiling", 35, "Running pdflatex (pass 1)")
-        rc, log = _run(pdflatex_cmd, tmp_path, COMPILE_TIMEOUT_SECONDS)
-        combined_log.append(f"--- pdflatex pass 1 ---\n{log}")
+        update_progress("compiling", 35, f"Running {engine} (pass 1)")
+        rc, log = _run(engine_cmd, tmp_path, COMPILE_TIMEOUT_SECONDS)
+        combined_log.append(f"--- {engine} pass 1 ---\n{log}")
         if rc != 0:
             fail("LaTeX compilation failed on first pass.")
 
@@ -140,15 +183,15 @@ def compile_latex_job(document_id: str, files_data: list[dict], template: str) -
             if rc != 0 and "I found no" not in log and "I couldn't open" not in log:
                 pass  # keep going; pdflatex passes below will surface real issues
 
-            update_progress("compiling", 70, "Running pdflatex (pass 2)")
-            rc, log = _run(pdflatex_cmd, tmp_path, COMPILE_TIMEOUT_SECONDS)
-            combined_log.append(f"--- pdflatex pass 2 ---\n{log}")
+            update_progress("compiling", 70, f"Running {engine} (pass 2)")
+            rc, log = _run(engine_cmd, tmp_path, COMPILE_TIMEOUT_SECONDS)
+            combined_log.append(f"--- {engine} pass 2 ---\n{log}")
             if rc != 0:
                 fail("LaTeX compilation failed after bibtex.")
 
-            update_progress("compiling", 85, "Running pdflatex (pass 3)")
-            rc, log = _run(pdflatex_cmd, tmp_path, COMPILE_TIMEOUT_SECONDS)
-            combined_log.append(f"--- pdflatex pass 3 ---\n{log}")
+            update_progress("compiling", 85, f"Running {engine} (pass 3)")
+            rc, log = _run(engine_cmd, tmp_path, COMPILE_TIMEOUT_SECONDS)
+            combined_log.append(f"--- {engine} pass 3 ---\n{log}")
             if rc != 0:
                 fail("LaTeX compilation failed on final pass.")
 
