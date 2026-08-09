@@ -14,6 +14,9 @@ RUN apt-get update && apt-get install -y \
     texlive-science \
     texlive-pictures \
     texlive-bibtex-extra \
+    texlive-xetex \
+    texlive-lang-arabic \
+    fonts-noto \
     biber \
     latexmk \
     && rm -rf /var/lib/apt/lists/*
