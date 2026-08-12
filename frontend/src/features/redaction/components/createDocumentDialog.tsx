@@ -1,12 +1,7 @@
 import { useState } from "react";
 import { Button, Modal, Stack, TextInput, SegmentedControl, Text } from "@mantine/core";
+import { useTemplates } from "../hooks/useTemplates";
 
-const TEMPLATES = [
-  { value: "default", label: "Default", description: "Plain article, minimal starter" },
-  { value: "arxiv", label: "arXiv", description: "Preprint style with abstract" },
-  { value: "ieee", label: "IEEE", description: "Conference paper (IEEEtran)" },
-  { value: "acl", label: "ACL", description: "ACL conference/workshop style" },
-];
 
 interface CreateDocumentDialogProps {
   opened: boolean;
@@ -28,6 +23,8 @@ export function CreateDocumentDialog({
     onCreate(title.trim() || "Untitled", template);
   };
 
+  const {data: templates = []} = useTemplates();
+
   return (
     <Modal opened={opened} onClose={onClose} title="New document" centered>
       <Stack gap="md">
@@ -44,10 +41,10 @@ export function CreateDocumentDialog({
             fullWidth
             value={template}
             onChange={setTemplate}
-            data={TEMPLATES.map((t) => ({ value: t.value, label: t.label }))}
+            data={templates.map((t) => ({ value: t.value, label: t.label }))}
           />
           <Text size="xs" c="dimmed">
-            {TEMPLATES.find((t) => t.value === template)?.description}
+            {templates.find((t) => t.value === template)?.description}
           </Text>
         </Stack>
 

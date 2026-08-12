@@ -97,3 +97,9 @@ export interface DocumentVersionDetail {
   author: string;
   diffs: FileDiff[];
 }
+
+export interface Template {
+  value: string;
+  label: string;
+  description: string;
+}

@@ -1,0 +1,29 @@
+{
+  "templates": [
+    {
+      "value": "default",
+      "label": "Default",
+      "description": "Plain article, minimal starter"
+    },
+    {
+      "value": "arxiv",
+      "label": "arXiv",
+      "description": "Preprint style with abstract"
+    },
+    {
+      "value": "ieee",
+      "label": "IEEE",
+      "description": "Conference paper (IEEEtran)"
+    },
+    {
+      "value": "ieee_access",
+      "label": "IEEE Access",
+      "description": "Multidisciplinary open access journal style"
+    },
+    {
+      "value": "acl",
+      "label": "ACL",
+      "description": "ACL conference/workshop style"
+    }
+  ]
+}

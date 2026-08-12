@@ -1,7 +1,7 @@
 // redaction/api/redaction.ts
 import { queryOptions } from "@tanstack/react-query";
 import { api, toPublicUrl } from "#/shared/api/client";
-import type { ProjectFile, RedactionDocument, Collaborator, CollaboratorRole, Invitation, DocumentVersion, VersionTrigger, DocumentVersionDetail } from "../types/redaction";
+import type { ProjectFile, RedactionDocument, Collaborator, CollaboratorRole, Invitation, DocumentVersion, VersionTrigger, DocumentVersionDetail, Template } from "../types/redaction";
 
 interface FileDto {
   id: string;
@@ -59,6 +59,9 @@ function mapDocument(data: DocumentDto): RedactionDocument {
     })),
   };
 }
+
+
+
 
 export async function createDocument(
   title: string,
@@ -297,4 +300,13 @@ export async function restoreDocumentVersion(documentId: string, versionId: stri
 
 export async function checkpointDocument(documentId: string): Promise<void> {
   await api.post(`/api/texademia/documents/${documentId}/checkpoint`);
+}
+
+// templates ============================================================================================================
+
+
+
+export async function getTemplates(): Promise<Template[]> {
+  const data = await api.get<Template[]>("/api/texademia/templates");
+  return data.map((d) => ({ value: d.value, label: d.label, description: d.description }));
 }

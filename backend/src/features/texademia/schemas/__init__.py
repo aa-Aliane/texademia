@@ -7,6 +7,7 @@ from .document import (
     FileUpdate,
 )
 from .profile import ProfileCreate, ProfileRead, ProfileUpdate
+from .templates import TemplateRead
 
 __all__ = [
     "ProfileRead",
@@ -17,4 +18,5 @@ __all__ = [
     "DocumentRead",
     "DocumentCreate",
     "DocumentUpdate",
+    "TemplateRead",
 ]

@@ -3,6 +3,7 @@ from .documents import router as documents_router
 from .compile import router as compile_router
 from .collaborators import router as collaborators_router
 from .websocket import router as websocket_router
+from .templates import router as templates_router
 
 __all__ = [
     "profile_router",
@@ -10,4 +11,5 @@ __all__ = [
     "compile_router",
     "collaborators_router",
     "websocket_router",
+    "templates_router",
 ]
