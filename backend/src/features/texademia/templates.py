@@ -109,12 +109,38 @@ _ACL: List[Tuple[str, str, str]] = [
     ("references.bib", "bibtex", ""),
 ]
 
+# ACM TALLIP journal — acmart.cls (acmsmall = journal format) shipped in
+# assets/acm_tallip/ along with ACM-Reference-Format.bst.
+_ACM_TALLIP: List[Tuple[str, str, str]] = [
+    (
+        "main.tex",
+        "latex",
+        "\\documentclass[acmsmall]{acmart}\n"
+        "\\title{Your Paper Title}\n"
+        "\\author{Your Name}\n"
+        "\\affiliation{%\n"
+        "  \\institution{Your Affiliation}\n"
+        "  \\city{City}\n"
+        "  \\country{Country}}\n"
+        "\\email{you@example.com}\n"
+        "\\begin{document}\n"
+        "\\begin{abstract}\nWrite your abstract here.\n\\end{abstract}\n"
+        "\\maketitle\n"
+        "\\section{Introduction}\n"
+        "\\bibliographystyle{ACM-Reference-Format}\n"
+        "\\bibliography{references}\n"
+        "\\end{document}\n",
+    ),
+    ("references.bib", "bibtex", ""),
+]
+
 _TEMPLATES = {
     "default": _DEFAULT,
     "arxiv": _ARXIV,
     "ieee": _IEEE,
     "ieee_access": _IEEE_ACCESS,
     "acl": _ACL,
+    "acm_tallip": _ACM_TALLIP,
 }
 
 TEMPLATE_NAMES = set(_TEMPLATES.keys())

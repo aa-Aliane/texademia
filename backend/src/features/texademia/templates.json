@@ -24,6 +24,11 @@
       "value": "acl",
       "label": "ACL",
       "description": "ACL conference/workshop style"
+    },
+    {
+      "value": "acm_tallip",
+      "label": "ACM TALLIP",
+      "description": "ACM journal style (acmart, acmsmall)"
     }
   ]
 }

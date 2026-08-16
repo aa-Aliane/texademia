@@ -42,6 +42,10 @@ export function CreateDocumentDialog({
             value={template}
             onChange={setTemplate}
             data={templates.map((t) => ({ value: t.value, label: t.label }))}
+            styles={{
+              root: { flexWrap: "wrap", height: "auto", gap: 4 },
+              control: { flex: "1 0 auto" },
+            }}
           />
           <Text size="xs" c="dimmed">
             {templates.find((t) => t.value === template)?.description}
