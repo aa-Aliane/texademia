@@ -29,6 +29,11 @@
       "value": "acm_tallip",
       "label": "ACM TALLIP",
       "description": "ACM journal style (acmart, acmsmall)"
+    },
+    {
+      "value": "neurocomputing",
+      "label": "Neurocomputing",
+      "description": "Elsevier journal style (elsarticle)"
     }
   ]
 }

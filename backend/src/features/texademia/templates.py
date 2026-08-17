@@ -134,6 +134,30 @@ _ACM_TALLIP: List[Tuple[str, str, str]] = [
     ("references.bib", "bibtex", ""),
 ]
 
+# Elsevier Neurocomputing — elsarticle.cls shipped in assets/neurocomputing/
+# with the elsarticle-num bibliography style.
+_NEUROCOMPUTING: List[Tuple[str, str, str]] = [
+    (
+        "main.tex",
+        "latex",
+        "\\documentclass[preprint,12pt]{elsarticle}\n"
+        "\\journal{Neurocomputing}\n"
+        "\\begin{document}\n"
+        "\\begin{frontmatter}\n"
+        "\\title{Your Paper Title}\n"
+        "\\author{Your Name}\n"
+        "\\ead{you@example.com}\n"
+        "\\affiliation{organization={Your Affiliation}, city={City}, country={Country}}\n"
+        "\\begin{abstract}\nWrite your abstract here.\n\\end{abstract}\n"
+        "\\end{frontmatter}\n"
+        "\\section{Introduction}\n"
+        "\\bibliographystyle{elsarticle-num}\n"
+        "\\bibliography{references}\n"
+        "\\end{document}\n",
+    ),
+    ("references.bib", "bibtex", ""),
+]
+
 _TEMPLATES = {
     "default": _DEFAULT,
     "arxiv": _ARXIV,
@@ -141,6 +165,7 @@ _TEMPLATES = {
     "ieee_access": _IEEE_ACCESS,
     "acl": _ACL,
     "acm_tallip": _ACM_TALLIP,
+    "neurocomputing": _NEUROCOMPUTING,
 }
 
 TEMPLATE_NAMES = set(_TEMPLATES.keys())
