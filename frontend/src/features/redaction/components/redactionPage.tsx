@@ -3,6 +3,8 @@ import { IconEye, IconCode } from "@tabler/icons-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Editor } from "./editor";
+import { CompileErrorBanner } from "./compileErrorBanner";
+import { parseLatexLog } from "./parseLatexLog";
 import { PdfPreview } from "./pdfPreview";
 import { FileTabs, LOG_TAB_ID, PREVIEW_TAB_ID } from "./fileTabs";
 import { DocumentHeader } from "./documentHeader";
@@ -26,6 +28,7 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [richMode, setRichMode] = useState(false);
+  const [gotoLine, setGotoLine] = useState<number | null>(null);
 
   // Query Backend State
   const { data: document } = useQuery(documentQueryOptions(documentId));
@@ -207,6 +210,20 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
         </div>
       )}
 
+      {compilePhase === "error" && (
+        <CompileErrorBanner
+          errors={parseLatexLog(compileLog ?? "")}
+          fallbackMessage={compileError}
+          hideLogButton={currentTabId === LOG_TAB_ID}
+          onGotoLine={(line) => {
+            const main = files.find((f) => f.name === "main.tex") ?? files[0];
+            if (main && main.id !== currentTabId) handleSelectTab(main.id);
+            setGotoLine(line);
+          }}
+          onOpenLog={() => handleSelectTab(LOG_TAB_ID)}
+        />
+      )}
+
       <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
         {currentTabId === PREVIEW_TAB_ID ? (
           <PdfPreview pdfUrl={pdfUrl} />
@@ -221,6 +238,7 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
             remoteCursors={remoteCursorsByFile[currentTabId]}
             onCursorMove={handleCursorMove}
             richMode={richMode}
+            gotoLine={gotoLine}
           />
         ) : null}
       </div>

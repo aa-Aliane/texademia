@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { startCompileJob, pollCompileStatus } from "../api/redaction";
+import { startCompileJob, pollCompileStatus, type CompilePollResponse } from "../api/redaction";
 import type { ProjectFile } from "../types/redaction";
 import { useRedactionStore } from "../store/redactionStore";
 import { LOG_TAB_ID, PREVIEW_TAB_ID } from "../components/fileTabs";
@@ -35,6 +35,10 @@ export function useCompileDocument(
   const setActiveTab = useRedactionStore((state) => state.setActiveTab);
 
   const [jobId, setJobId] = useState<string | null>(null);
+  // Terminal result kept after the job ends — nulling jobId changes the
+  // query key, which would otherwise wipe the error/log and flip the UI
+  // back to "done".
+  const [finalResult, setFinalResult] = useState<CompilePollResponse | null>(null);
   const [pdfCacheKey] = useState(() => `${Date.now()}`);
 
   const startMutation = useMutation({
@@ -53,6 +57,7 @@ export function useCompileDocument(
     const data = query.state.data;
     // Handle side-effects cleanly inside the query callback when the job finishes
     if (data?.status === "done" && jobId) {
+      setFinalResult(null);
       setActiveTab(documentId, PREVIEW_TAB_ID);
       useRedactionStore.getState().clearDirty(documentId);
       setJobId(null);
@@ -63,6 +68,7 @@ export function useCompileDocument(
       return false;
     }
     if (data?.status === "error" && jobId) {
+      setFinalResult(data);
       if (data.log) {
         setActiveTab(documentId, LOG_TAB_ID);
       }
@@ -77,6 +83,7 @@ export function useCompileDocument(
     if (startMutation.isPending) return "saving";
     if (!pollQuery.data) {
       if (jobId) return "queued";
+      if (finalResult) return finalResult.status === "error" ? "error" : "done";
       return initialPdfUrl ? "done" : "idle";
     }
     if (pollQuery.data.status === "done") return "done";
@@ -98,11 +105,18 @@ export function useCompileDocument(
   const error =
     pollQuery.data?.status === "error"
       ? pollQuery.data.error ?? "Compilation failed"
+      : finalResult?.status === "error"
+      ? finalResult.error ?? "Compilation failed"
       : startMutation.isError
       ? (startMutation.error as Error)?.message ?? "Failed to start compilation"
       : null;
 
-  const log = pollQuery.data?.log ?? pollQuery.data?.result?.log ?? null;
+  const log =
+    pollQuery.data?.log ??
+    pollQuery.data?.result?.log ??
+    finalResult?.log ??
+    finalResult?.result?.log ??
+    null;
 
   const isActive = phase === "saving" || phase === "queued" || phase === "running";
   const isDone = phase === "done";
@@ -110,6 +124,7 @@ export function useCompileDocument(
 
   const compile = (files: ProjectFile[]) => {
     setJobId(null);
+    setFinalResult(null);
     queryClient.removeQueries({ queryKey: ["compile-job"] });
     startMutation.mutate(files);
   };

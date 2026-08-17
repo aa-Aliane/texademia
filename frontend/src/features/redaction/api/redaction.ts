@@ -128,6 +128,7 @@ export interface CompilePollResponse {
     log: string;
   };
   error?: string;
+  log?: string;
 }
 
 export async function startCompileJob(

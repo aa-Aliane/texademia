@@ -18,6 +18,7 @@ interface EditorProps {
   onCursorMove?: (pos: number) => void;
   readOnly?: boolean;
   richMode?: boolean;
+  gotoLine?: number | null;
 }
 
 // Module-level, not per-render — StreamLanguage.define(...) only needs to
@@ -47,8 +48,23 @@ export function Editor({
   onCursorMove,
   readOnly,
   richMode,
+  gotoLine,
 }: EditorProps) {
   const editorRef = useRef<ReactCodeMirrorRef>(null);
+
+  // Jump-to-line (compile errors): select the line and scroll it into view.
+  useEffect(() => {
+    if (gotoLine == null) return;
+    const view = editorRef.current?.view;
+    if (!view) return;
+    const line = Math.max(1, Math.min(gotoLine, view.state.doc.lines));
+    const pos = view.state.doc.line(line).from;
+    view.dispatch({
+      selection: { anchor: pos },
+      effects: EditorView.scrollIntoView(pos, { y: "center" }),
+    });
+    view.focus();
+  }, [gotoLine]);
 
   useEffect(() => {
     editorRef.current?.view?.dispatch({ effects: setLineAuthors.of(lineAuthors ?? []) });
