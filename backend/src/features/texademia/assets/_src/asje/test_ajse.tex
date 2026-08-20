@@ -1,0 +1,53 @@
+\documentclass[pdflatex,sn-basic,Numbered,iicol,twocolumn]{sn-jnl}
+
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{amsthm}
+\usepackage{mathrsfs}
+\usepackage[title]{appendix}
+\usepackage{xcolor}
+\usepackage{textcomp}
+\usepackage{manyfoot}
+\usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algorithmicx}
+\usepackage{algpseudocode}
+\usepackage{listings}
+\usepackage{geometry}
+
+\raggedbottom
+
+\begin{document}
+
+\title[Article Title]{A Sample Article for the Arabian Journal for Science and Engineering}
+
+\author*[1]{\fnm{Jane} \sur{Researcher}}\email{jane@example.org}
+
+\affil*[1]{\orgdiv{Department of Computer Science}, \orgname{Some University}, \orgaddress{\city{Algiers}, \country{Algeria}}}
+
+\abstract{This is a test abstract to confirm that the vendored sn-jnl class
+compiles correctly with an AJSE-style double-column layout (the {\tt iicol}
+option) and the numbered Springer Basic bibliography style ({\tt sn-basic}).}
+
+\keywords{neural networks, machine learning, low-resource languages}
+
+\maketitle
+
+\section{Introduction}\label{sec1}
+
+This is a minimal smoke test for the AJSE configuration of sn-jnl. It cites
+a couple of references \cite{article1,article2} to confirm the numbered
+bibliography style renders correctly, matching AJSE's in-text style of
+numbers in square brackets such as \cite{article1,article2}. This paragraph
+is deliberately padded with extra filler text so that, if the double-column
+layout requested via the iicol and twocolumn class options is actually
+active, the column break will be visually obvious in the rendered output
+rather than ambiguous on a single short paragraph. Repeating a bit more
+filler text here to fill out the paragraph further and make the column
+width, if narrower than the full page, clearly visible to the eye when the
+page is rasterized and inspected.
+
+\bibliography{refs}
+
+\end{document}

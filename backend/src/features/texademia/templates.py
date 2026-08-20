@@ -158,6 +158,46 @@ _NEUROCOMPUTING: List[Tuple[str, str, str]] = [
     ("references.bib", "bibtex", ""),
 ]
 
+# ASJE — Springer Nature journal class (sn-jnl.cls) shipped in assets/asje/
+# with the sn-* bibliography styles. sn-basic+Numbered = numbered refs,
+# iicol/twocolumn = two-column layout. manyfoot repairs sn-jnl v0.1's
+# unmet \SetFootnoteHook dependency on modern TeX Live.
+_ASJE: List[Tuple[str, str, str]] = [
+    (
+        "main.tex",
+        "latex",
+        "\\documentclass[pdflatex,sn-basic,Numbered,iicol,twocolumn]{sn-jnl}\n"
+        "\n"
+        "\\usepackage{graphicx}\n"
+        "\\usepackage{multirow}\n"
+        "\\usepackage{amsmath,amssymb,amsfonts}\n"
+        "\\usepackage{amsthm}\n"
+        "\\usepackage{mathrsfs}\n"
+        "\\usepackage[title]{appendix}\n"
+        "\\usepackage{xcolor}\n"
+        "\\usepackage{textcomp}\n"
+        "\\usepackage{manyfoot}\n"
+        "\\usepackage{booktabs}\n"
+        "\\usepackage{algorithm}\n"
+        "\\usepackage{algorithmicx}\n"
+        "\\usepackage{algpseudocode}\n"
+        "\\usepackage{listings}\n"
+        "\\usepackage{geometry}\n"
+        "\n"
+        "\\begin{document}\n"
+        "\\title{Your Paper Title}\n"
+        "\\author*[1]{\\fnm{Your} \\sur{Name}}\\email{you@example.com}\n"
+        "\\affil*[1]{\\orgname{Your Affiliation}, \\city{City}, \\country{Country}}\n"
+        "\\abstract{Write your abstract here.}\n"
+        "\\keywords{keyword one, keyword two, keyword three}\n"
+        "\\maketitle\n"
+        "\\section{Introduction}\\label{sec1}\n"
+        "\\bibliography{references}\n"
+        "\\end{document}\n",
+    ),
+    ("references.bib", "bibtex", ""),
+]
+
 _TEMPLATES = {
     "default": _DEFAULT,
     "arxiv": _ARXIV,
@@ -166,6 +206,7 @@ _TEMPLATES = {
     "acl": _ACL,
     "acm_tallip": _ACM_TALLIP,
     "neurocomputing": _NEUROCOMPUTING,
+    "asje": _ASJE,
 }
 
 TEMPLATE_NAMES = set(_TEMPLATES.keys())
