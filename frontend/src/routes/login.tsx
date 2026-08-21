@@ -6,13 +6,11 @@ export const Route = createFileRoute("/login")({
   beforeLoad: async ({ context: { queryClient } }) => {
     try {
       await queryClient.ensureQueryData(currentUserQueryOptions(getCookieHeader()));
-      throw redirect({ to: "/redaction" });
+    } catch {
+      return;
     }
-     catch (error) {
-      if (error instanceof Error && "isRedirect" in error) {
-        throw error;
-      }
-    }
+
+    throw redirect({ to: "/redaction" });
   },
   component: LoginForm,
 });

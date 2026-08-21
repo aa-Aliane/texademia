@@ -48,6 +48,26 @@ async function refreshAccessToken(cookieHeader?: string | null): Promise<string[
   return refreshPromise;
 }
 
+// Merge fresh Set-Cookie pairs into the SSR cookie header so the retry uses
+// the NEW access token instead of the expired one that just 401'd.
+function mergeCookies(
+  original: string | null | undefined,
+  setCookies: string[]
+): string | undefined {
+  if (setCookies.length === 0) return original ?? undefined;
+  const jar = new Map<string, string>();
+  for (const part of (original ?? "").split(";")) {
+    const eq = part.indexOf("=");
+    if (eq > 0) jar.set(part.slice(0, eq).trim(), part.slice(eq + 1).trim());
+  }
+  for (const sc of setCookies) {
+    const pair = sc.split(";")[0];
+    const eq = pair.indexOf("=");
+    if (eq > 0) jar.set(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim());
+  }
+  return [...jar].map(([k, v]) => `${k}=${v}`).join("; ");
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { cookieHeader, headers, ...rest } = options;
   const baseUrl = resolveBaseUrl();
@@ -72,8 +92,18 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     res.status === 401 && path !== "/api/auth/jwt/refresh"
   ) {
     try {
-      await refreshAccessToken(cookieHeader);
-      res = await doFetch();
+      const setCookies = await refreshAccessToken(cookieHeader);
+      const retryCookie = mergeCookies(cookieHeader, setCookies);
+      res = await (async () =>
+        fetch(`${baseUrl}${path}`, {
+          ...rest,
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...(retryCookie ? { Cookie: retryCookie } : {}),
+            ...headers,
+          },
+        }))();
     } catch {
       // Refresh failed; keep the original 401 response so the caller can
       // redirect to login or surface the error.
