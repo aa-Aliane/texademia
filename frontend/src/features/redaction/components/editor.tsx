@@ -1,24 +1,26 @@
-import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
-import { StreamLanguage, type LanguageSupport, type StreamParser } from "@codemirror/language";
+// Editor.tsx
+import { StreamLanguage, type StreamParser } from "@codemirror/language";
 import { stex } from "@codemirror/legacy-modes/mode/stex";
 import { EditorView, type Extension } from "@codemirror/view";
-import { useEffect, useMemo, useRef } from "react";
-import { blameExtension, setLineAuthors } from "./blameExtension";
-import { cursorExtension, setRemoteCursors, type RemoteCursor } from "./cursorExtension";
+import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
+import { useMemo, useRef } from "react";
+import { cursorPersistencePlugin } from "../plugins/cursorPersistencePlugin";
+import { gotoLineSync, lineAuthorSync, remoteCursorSync } from "../plugins/editorStoreBridge";
+import { blameExtension } from "./blameExtension";
+import { cursorExtension } from "./cursorExtension";
 import { richTextExtension } from "./richTextMode";
 import { zedSearchExtension } from "./searchPanel";
-import type { LineAuthor } from "../types/redaction";
 
 interface EditorProps {
+  /** Stable identity for the open document — drives cursor/scroll persistence. */
+  documentId: string;
+  /** Active file/tab id — cursor/scroll are persisted per file, not per document. */
+  fileId?: string;
   value: string;
   language?: "latex" | "bibtex" | "log";
   onChange: (value: string) => void;
-  lineAuthors?: LineAuthor[];
-  remoteCursors?: RemoteCursor[];
-  onCursorMove?: (pos: number) => void;
   readOnly?: boolean;
   richMode?: boolean;
-  gotoLine?: number | null;
 }
 
 // Module-level, not per-render — StreamLanguage.define(...) only needs to
@@ -39,63 +41,38 @@ const gutterTheme = EditorView.theme({
   },
 });
 
-export function Editor({
-  value,
-  language,
-  onChange,
-  lineAuthors,
-  remoteCursors,
-  onCursorMove,
-  readOnly,
-  richMode,
-  gotoLine,
-}: EditorProps) {
+export function Editor({ documentId, fileId, value, language, onChange, readOnly, richMode }: EditorProps) {
   const editorRef = useRef<ReactCodeMirrorRef>(null);
+  const persistKey = fileId ?? documentId;
 
-  // Jump-to-line (compile errors): select the line and scroll it into view.
-  useEffect(() => {
-    if (gotoLine == null) return;
-    const view = editorRef.current?.view;
-    if (!view) return;
-    const line = Math.max(1, Math.min(gotoLine, view.state.doc.lines));
-    const pos = view.state.doc.line(line).from;
-    view.dispatch({
-      selection: { anchor: pos },
-      effects: EditorView.scrollIntoView(pos, { y: "center" }),
-    });
-    view.focus();
-  }, [gotoLine]);
-
-  useEffect(() => {
-    editorRef.current?.view?.dispatch({ effects: setLineAuthors.of(lineAuthors ?? []) });
-  }, [lineAuthors]);
-
-  useEffect(() => {
-    editorRef.current?.view?.dispatch({ effects: setRemoteCursors.of(remoteCursors ?? []) });
-  }, [remoteCursors]);
-
-  // Stable across re-renders — only recreated if onCursorMove's identity
-  // actually changes (it shouldn't, if the caller wraps it in useCallback).
-  const cursorReporter = useMemo(
-    () =>
-      EditorView.updateListener.of((update) => {
-        if (update.selectionSet && onCursorMove) {
-          onCursorMove(update.state.selection.main.head);
-        }
-      }),
-    [onCursorMove]
-  );
-
+  // All state sync (line authors, remote cursors, goto-line, cursor/scroll
+  // persistence) now lives inside ViewPlugins that subscribe to the Zustand
+  // store directly — no React useEffect involved. Recreated only when
+  // persistKey/language/richMode actually change, which is also what forces
+  // cursorPersistencePlugin to re-run its "restore on construction" logic
+  // for the newly opened file.
   const extensions: Extension[] = useMemo(() => {
-    const base = [stexLanguage, gutterTheme, blameExtension, cursorExtension, cursorReporter, zedSearchExtension];
-    if (language === "latex" && richMode) {
-      return [...base, richTextExtension];
-    }
-    return base;
-  }, [cursorReporter, language, richMode]);
+    const base = [
+      stexLanguage,
+      gutterTheme,
+      blameExtension,
+      cursorExtension,
+      lineAuthorSync,
+      remoteCursorSync,
+      gotoLineSync,
+      cursorPersistencePlugin(persistKey),
+      zedSearchExtension,
+    ];
+    return language === "latex" && richMode ? [...base, richTextExtension] : base;
+  }, [persistKey, language, richMode]);
 
   return (
     <CodeMirror
+      // key forces a hard remount when switching files/documents, guaranteeing
+      // ViewPlugins are reconstructed (and cursorPersistencePlugin's
+      // restore-on-mount fires) rather than relying on @uiw/react-codemirror
+      // to diff a changed extensions array correctly.
+      key={persistKey}
       ref={editorRef}
       value={value}
       height="100%"

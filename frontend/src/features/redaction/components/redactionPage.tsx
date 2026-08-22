@@ -1,21 +1,21 @@
-import { useCallback, useRef, useState } from "react";
-import { IconEye, IconCode } from "@tabler/icons-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCurrentUser } from "#/features/auth";
+import { IconCode, IconEye } from "@tabler/icons-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { Editor } from "./editor";
+import { useCallback, useRef, useState } from "react";
+import { documentQueryOptions, duplicateDocument, getDocumentZipUrl, saveFile } from "../api/redaction";
+import { useCompileDocument } from "../hooks/useCompileDocument";
+import { useDocumentSocket } from "../hooks/useDocumentSocket";
+import { useUpdateDocumentTitle } from "../hooks/useUpdateDocumentTitle";
+import { useRedactionStore } from "../store/redactionStore";
+import { CollaboratorsDialog } from "./collaboratorsDialog";
 import { CompileErrorBanner } from "./compileErrorBanner";
-import { parseLatexLog } from "./parseLatexLog";
-import { PdfPreview } from "./pdfPreview";
-import { FileTabs, LOG_TAB_ID, PREVIEW_TAB_ID } from "./fileTabs";
 import { DocumentHeader } from "./documentHeader";
 import { DuplicateDocumentDialog } from "./duplicateDocumentDialog";
-import { CollaboratorsDialog } from "./collaboratorsDialog";
-import { useCompileDocument } from "../hooks/useCompileDocument";
-import { useUpdateDocumentTitle } from "../hooks/useUpdateDocumentTitle";
-import { useDocumentSocket } from "../hooks/useDocumentSocket";
-import { documentQueryOptions, duplicateDocument, getDocumentZipUrl } from "../api/redaction";
-import { useRedactionStore } from "../store/redactionStore";
-import { useCurrentUser } from "#/features/auth";
+import { Editor } from "./editor";
+import { FileTabs, LOG_TAB_ID, PREVIEW_TAB_ID } from "./fileTabs";
+import { parseLatexLog } from "./parseLatexLog";
+import { PdfPreview } from "./pdfPreview";
 import { VersionHistoryDrawer } from "./versionHistoryDrawer";
 
 interface RedactionPageProps {
@@ -23,12 +23,12 @@ interface RedactionPageProps {
 }
 
 const CURSOR_THROTTLE_MS = 80;
+const AUTOSAVE_DELAY_MS = 1500;
 
 export function RedactionPage({ documentId }: RedactionPageProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [richMode, setRichMode] = useState(false);
-  const [gotoLine, setGotoLine] = useState<number | null>(null);
 
   // Query Backend State
   const { data: document } = useQuery(documentQueryOptions(documentId));
@@ -53,9 +53,8 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
   // Live sockets & refresh trigger
   const {
     presenceByFile,
-    remoteCursorsByFile,
-    setActiveFile: setSocketActiveFile,
     sendCursor,
+    setActiveFile: setSocketActiveFile,
   } = useDocumentSocket(documentId, currentUser?.id, (event) => {
     if (event.phase) {
       queryClient.invalidateQueries({ queryKey: ["document", documentId] });
@@ -94,6 +93,8 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
   const lastSentRef = useRef(0);
   const pendingRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
 
   const handleCursorMove = useCallback(
     (pos: number) => {
@@ -137,6 +138,16 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
         ),
       };
     });
+
+    // Debounced autosave — without this, edits live only in the query cache
+    // and any refetch (window focus, socket invalidation) restores stale
+    // server content.
+    if (fileId) {
+      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+      autosaveTimer.current = setTimeout(() => {
+        saveFile(documentId, fileId, content);
+      }, AUTOSAVE_DELAY_MS);
+    }
   };
 
   const handleSelectTab = (id: string) => {
@@ -228,17 +239,15 @@ export function RedactionPage({ documentId }: RedactionPageProps) {
         {currentTabId === PREVIEW_TAB_ID ? (
           <PdfPreview pdfUrl={pdfUrl} />
         ) : currentTabId === LOG_TAB_ID && compileLog ? (
-          <Editor value={compileLog} language="log" onChange={() => {}} readOnly />
+          <Editor documentId={documentId} value={compileLog} language="log" onChange={() => {}} readOnly />
         ) : activeFile ? (
           <Editor
+            documentId={documentId}
+            fileId={currentTabId}
             value={activeFile.content}
             language={activeFile.language}
             onChange={updateActiveFileContent}
-            lineAuthors={activeFile.lineAuthors}
-            remoteCursors={remoteCursorsByFile[currentTabId]}
-            onCursorMove={handleCursorMove}
             richMode={richMode}
-            gotoLine={gotoLine}
           />
         ) : null}
       </div>

@@ -81,6 +81,9 @@ export const documentQueryOptions = (documentId: string, cookieHeader?: string |
   queryOptions({
     queryKey: ["document", documentId],
     queryFn: () => getDocument(documentId, cookieHeader),
+    // Edits live in this cache between autosaves — a focus refetch would
+    // restore stale server content and wipe them.
+    refetchOnWindowFocus: false,
   });
 
 // Plain-link download (cookie is samesite=lax → sent on top-level navigation,
@@ -90,7 +93,7 @@ export function getDocumentZipUrl(documentId: string): string {
   return toPublicUrl(`/api/texademia/documents/${documentId}/export.zip`);
 }
 
-async function saveFile(documentId: string, fileId: string, content: string): Promise<void> {
+export async function saveFile(documentId: string, fileId: string, content: string): Promise<void> {
   await api.patch(`/api/texademia/documents/${documentId}/files/${fileId}`, { content });
 }
 
